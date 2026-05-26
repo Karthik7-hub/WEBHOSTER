@@ -1,5 +1,11 @@
 const app = require('./src/app');
 const config = require('./src/config/config');
+const connectDB = require('./src/config/database');
+
+// Connect to MongoDB
+connectDB().catch((err) => {
+  console.error('Fatal: Failed to connect to MongoDB on startup:', err);
+});
 
 const server = app.listen(config.port, () => {
   console.log(`=========================================`);

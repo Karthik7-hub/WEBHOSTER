@@ -44,7 +44,7 @@ async function deployZIP(req, res, next) {
  */
 async function getDeployments(req, res, next) {
   try {
-    const list = deploymentService.getAllDeployments();
+    const list = await deploymentService.getAllDeployments();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
     const enrichedList = list.map((item) => ({
@@ -71,7 +71,7 @@ async function getDeployments(req, res, next) {
 async function getDeploymentById(req, res, next) {
   try {
     const { id } = req.params;
-    const deployment = deploymentService.getDeployment(id);
+    const deployment = await deploymentService.getDeployment(id);
 
     if (!deployment) {
       return res.status(404).json({

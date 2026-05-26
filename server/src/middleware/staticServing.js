@@ -5,9 +5,9 @@ const config = require('../config/config');
 
 /**
  * Custom static file serving middleware for deployed websites.
- * Captures `/p/:id/*` traffic and resolves correct filesystem resources.
+ * Captures `/p/:id/*` traffic, restores files lazily if missing, and resolves correct filesystem resources.
  */
-function serveDeployedSite(req, res, next) {
+async function serveDeployedSite(req, res, next) {
   // Extract parts from path (e.g. "/p/rd92yjude1/css/style.css" -> ["p", "rd92yjude1", "css", "style.css"])
   const parts = req.path.split('/').filter(Boolean);
 
@@ -16,7 +16,7 @@ function serveDeployedSite(req, res, next) {
   }
 
   const deploymentId = parts[1];
-  const deployment = deploymentService.getDeployment(deploymentId);
+  const deployment = await deploymentService.getDeployment(deploymentId);
 
   // 1. If deployment does not exist, return a premium 404 page
   if (!deployment) {
@@ -103,6 +103,21 @@ function serveDeployedSite(req, res, next) {
 
   // 3. Resolve file path in deployments directory
   const baseDeploymentDir = path.join(config.paths.deployments, deploymentId);
+
+  // Lazy ZIP restoration if the folder was deleted (cold cache inside ephemeral Vercel /tmp)
+  if (!fs.existsSync(baseDeploymentDir)) {
+    if (!deployment.backupUrl) {
+      console.error(`[ERROR] Unable to restore deployment ${deploymentId}: backup URL is missing.`);
+      return res.status(404).send('Deployment files not found locally and no backup exists.');
+    }
+
+    try {
+      await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
+    } catch (restoreError) {
+      console.error(`[ERROR] Lazy restoration failed for ${deploymentId}:`, restoreError);
+      return res.status(500).send('Error unzipping deployment files from persistent storage.');
+    }
+  }
   
   // Extract the relative subpath being requested by subtracting prefix "/p/:id"
   const prefix = `/p/${deploymentId}`;

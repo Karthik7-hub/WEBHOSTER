@@ -1,41 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const { nanoid } = require('nanoid');
 const unzipper = require('unzipper');
 const config = require('../config/config');
 const zipSecurity = require('../security/zipSecurity');
 const imageKitService = require('./imageKitService');
-
-const METADATA_PATH = path.join(config.paths.deployments, 'metadata.json');
-
-// Ensure metadata file exists
-if (!fs.existsSync(METADATA_PATH)) {
-  fs.writeFileSync(METADATA_PATH, JSON.stringify([], null, 2));
-}
-
-/**
- * Reads all deployments from the metadata database.
- */
-function readMetadata() {
-  try {
-    const raw = fs.readFileSync(METADATA_PATH, 'utf-8');
-    return JSON.parse(raw);
-  } catch (error) {
-    console.error('Error reading deployment metadata:', error);
-    return [];
-  }
-}
-
-/**
- * Writes deployments list to the metadata database.
- */
-function writeMetadata(data) {
-  try {
-    fs.writeFileSync(METADATA_PATH, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('Error writing deployment metadata:', error);
-  }
-}
+const connectDB = require('../config/database');
+const Deployment = require('../models/Deployment');
 
 // Helper to generate a clean web-friendly slug from zip filename
 function slugify(text) {
@@ -51,124 +23,138 @@ function slugify(text) {
 }
 
 /**
- * Safe ZIP Extraction and deployment execution service.
- * 
- * @param {string} zipPath - Local path to the uploaded ZIP file.
- * @param {string} originalName - Original name of the uploaded ZIP.
- * @returns {Promise<Object>} - The newly created deployment record metadata.
+ * Downloads a file from a URL to a local destination path.
  */
-async function createDeployment(zipPath, originalName) {
-  const baseSlug = slugify(path.basename(originalName, path.extname(originalName))) || 'project';
-  
-  // Verify collision in existing metadata registry and ensure absolute uniqueness
-  const deployments = readMetadata();
-  let deploymentId = baseSlug;
-  let isUnique = !deployments.some((d) => d.id === deploymentId);
-  
-  if (!isUnique) {
-    while (!isUnique) {
-      // Generate a clean unique 4-character suffix like 'fer3'
-      const suffix = nanoid(4).toLowerCase();
-      deploymentId = `${baseSlug}-${suffix}`;
-      isUnique = !deployments.some((d) => d.id === deploymentId);
+function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download: Status ${response.statusCode}`));
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(resolve);
+      });
+    }).on('error', (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Safe ZIP Extraction helper.
+ * Extracts a local ZIP file to a target directory with path-traversal (ZIP Slip)
+ * and executable files injection guards.
+ */
+async function extractZip(zipPath, targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true });
+  const directory = await unzipper.Open.file(zipPath);
+  let fileCount = 0;
+  let indexHtmlPath = null;
+
+  for (const entry of directory.files) {
+    const normalizedPath = entry.path.replace(/\\/g, '/');
+
+    // ZIP Slip Prevention: Validate target boundary
+    if (!zipSecurity.isValidPath(targetDir, normalizedPath)) {
+      throw new Error(`Security Exception: Directory traversal attack detected in zip entry: ${entry.path}`);
+    }
+
+    if (entry.type === 'File') {
+      // Block Executable Extensions
+      if (!zipSecurity.isAllowedFileType(normalizedPath)) {
+        throw new Error(`Security Exception: Prohibited file extension in zip entry: ${entry.path}`);
+      }
+
+      const fullFilePath = path.join(targetDir, normalizedPath);
+      const parentDir = path.dirname(fullFilePath);
+
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+
+      const contentBuffer = await entry.buffer();
+      fs.writeFileSync(fullFilePath, contentBuffer);
+      fileCount++;
+
+      // Detect index.html (find the shallowest / root level index.html)
+      if (normalizedPath.toLowerCase().endsWith('index.html')) {
+        if (!indexHtmlPath || normalizedPath.split('/').length < indexHtmlPath.split('/').length) {
+          indexHtmlPath = normalizedPath;
+        }
+      }
+    } else if (entry.type === 'Directory') {
+      const fullDirPath = path.join(targetDir, normalizedPath);
+      if (!fs.existsSync(fullDirPath)) {
+        fs.mkdirSync(fullDirPath, { recursive: true });
+      }
     }
   }
 
-  const targetDir = path.join(config.paths.deployments, deploymentId);
+  return { fileCount, indexHtmlPath };
+}
 
-  let fileCount = 0;
-  let indexHtmlPath = null;
+/**
+ * Creates a new deployment by unzipping, checking security, uploading backup, and saving metadata.
+ */
+async function createDeployment(zipPath, originalName) {
+  await connectDB();
+  const baseSlug = slugify(path.basename(originalName, path.extname(originalName))) || 'project';
+
+  // Find a unique slug ID in MongoDB registry
+  let deploymentId = baseSlug;
+  let existing = await Deployment.findOne({ id: deploymentId });
+  while (existing) {
+    const suffix = nanoid(4).toLowerCase();
+    deploymentId = `${baseSlug}-${suffix}`;
+    existing = await Deployment.findOne({ id: deploymentId });
+  }
+
+  const targetDir = path.join(config.paths.deployments, deploymentId);
   let imageKitBackup = null;
+  let extracted = false;
 
   try {
-    // 1. Safe path creation
-    fs.mkdirSync(targetDir, { recursive: true });
+    // 1. Safe extraction locally to verify contents & find index.html
+    const { fileCount, indexHtmlPath } = await extractZip(zipPath, targetDir);
+    extracted = true;
 
-    // 2. Open ZIP using unzipper
-    const directory = await unzipper.Open.file(zipPath);
-
-    // 3. Scan and extract with absolute security
-    for (const entry of directory.files) {
-      // Normalize backslashes (Windows-generated ZIPs compatibility)
-      const normalizedPath = entry.path.replace(/\\/g, '/');
-
-      // ZIP Slip Prevention: Validate target boundary
-      if (!zipSecurity.isValidPath(targetDir, normalizedPath)) {
-        throw new Error(`Security Exception: Directory traversal attack detected in zip entry: ${entry.path}`);
-      }
-
-      if (entry.type === 'File') {
-        // Block Executable Extensions
-        if (!zipSecurity.isAllowedFileType(normalizedPath)) {
-          throw new Error(`Security Exception: Prohibited file extension in zip entry: ${entry.path}`);
-        }
-
-        const fullFilePath = path.join(targetDir, normalizedPath);
-        const parentDir = path.dirname(fullFilePath);
-
-        // Ensure subdirectories exist
-        if (!fs.existsSync(parentDir)) {
-          fs.mkdirSync(parentDir, { recursive: true });
-        }
-
-        // Write entry content safely
-        const contentBuffer = await entry.buffer();
-        fs.writeFileSync(fullFilePath, contentBuffer);
-        fileCount++;
-
-        // Detect index.html (find the shallowest / root level index.html)
-        if (normalizedPath.toLowerCase().endsWith('index.html')) {
-          if (!indexHtmlPath || normalizedPath.split('/').length < indexHtmlPath.split('/').length) {
-            indexHtmlPath = normalizedPath;
-          }
-        }
-      } else if (entry.type === 'Directory') {
-        const fullDirPath = path.join(targetDir, normalizedPath);
-        if (!fs.existsSync(fullDirPath)) {
-          fs.mkdirSync(fullDirPath, { recursive: true });
-        }
-      }
-    }
-
-    // 4. Require index.html presence for valid static hosting
     if (!indexHtmlPath) {
       throw new Error('Static Hosting Exception: No "index.html" was found in your ZIP archive.');
     }
 
-    // 5. Upload backup to ImageKit
+    // 2. Upload original ZIP backup to ImageKit
     try {
-      console.log(`Uploading ZIP backup to ImageKit for deployment ${deploymentId}...`);
+      console.log(`Uploading ZIP backup to ImageKit for deployment: ${deploymentId}...`);
       imageKitBackup = await imageKitService.uploadBackup(zipPath, `${deploymentId}.zip`);
       console.log(`ImageKit backup succeeded: ${imageKitBackup.url}`);
     } catch (ikError) {
       console.error('ImageKit backup upload failed, proceeding without backup:', ikError);
     }
 
-    // 6. Record Deployment Metadata
-    const newDeployment = {
+    // 3. Write metadata to MongoDB
+    const deployment = await Deployment.create({
       id: deploymentId,
       name: path.basename(originalName, path.extname(originalName)),
       originalFileName: originalName,
-      fileCount: fileCount,
+      fileCount,
       indexFilePath: indexHtmlPath,
-      createdAt: new Date().toISOString(),
       backupUrl: imageKitBackup ? imageKitBackup.url : null,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
-    };
+    });
 
-    const deployments = readMetadata();
-    deployments.unshift(newDeployment);
-    writeMetadata(deployments);
-
-    return newDeployment;
+    return deployment.toObject();
   } catch (error) {
-    // CLEANUP: If error occurs, recursively delete the extracted directory
-    if (fs.existsSync(targetDir)) {
+    // Cleanup local files if extraction failed
+    if (extracted && fs.existsSync(targetDir)) {
       fs.rmSync(targetDir, { recursive: true, force: true });
     }
     throw error;
   } finally {
-    // CLEANUP: Delete temporary zip file
+    // Always delete multer temporary ZIP
     if (fs.existsSync(zipPath)) {
       fs.unlinkSync(zipPath);
     }
@@ -178,32 +164,66 @@ async function createDeployment(zipPath, originalName) {
 /**
  * Returns all active deployments in the system.
  */
-function getAllDeployments() {
-  return readMetadata();
+async function getAllDeployments() {
+  await connectDB();
+  return await Deployment.find().sort({ createdAt: -1 }).lean();
 }
 
 /**
  * Returns metadata of a specific deployment.
  */
-function getDeployment(id) {
-  const deployments = readMetadata();
-  return deployments.find((d) => d.id === id) || null;
+async function getDeployment(id) {
+  await connectDB();
+  return await Deployment.findOne({ id }).lean();
 }
 
 /**
- * Deletes a deployment from storage and clears metadata database.
+ * Restores extracted static files inside `/tmp` from the ImageKit ZIP backup.
+ */
+async function restoreFromBackup(id, backupUrl) {
+  console.log(`Restoring deployment files from ImageKit for: ${id}...`);
+  const tempZipPath = path.join(config.paths.temp, `restore-${id}-${nanoid(4)}.zip`);
+  const targetDir = path.join(config.paths.deployments, id);
+
+  try {
+    // Ensure temp dir exists
+    if (!fs.existsSync(config.paths.temp)) {
+      fs.mkdirSync(config.paths.temp, { recursive: true });
+    }
+
+    // 1. Download ZIP from CDN
+    await downloadFile(backupUrl, tempZipPath);
+
+    // 2. Unzip safely
+    await extractZip(tempZipPath, targetDir);
+    console.log(`Successfully restored static files locally for: ${id}`);
+  } catch (error) {
+    console.error(`Failed to restore static files for ${id}:`, error);
+    // Cleanup partial folder
+    if (fs.existsSync(targetDir)) {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+    }
+    throw error;
+  } finally {
+    // Cleanup downloaded ZIP
+    if (fs.existsSync(tempZipPath)) {
+      fs.unlinkSync(tempZipPath);
+    }
+  }
+}
+
+/**
+ * Deletes a deployment from MongoDB, ImageKit, and local storage.
  */
 async function deleteDeployment(id) {
-  const deployments = readMetadata();
-  const deploymentIndex = deployments.findIndex((d) => d.id === id);
+  await connectDB();
+  const deployment = await Deployment.findOne({ id });
 
-  if (deploymentIndex === -1) {
+  if (!deployment) {
     throw new Error('Deployment not found');
   }
 
-  const deployment = deployments[deploymentIndex];
-
-  // 1. Delete extracted files from storage
+  // 1. Delete extracted files from storage if present
   const targetDir = path.join(config.paths.deployments, id);
   if (fs.existsSync(targetDir)) {
     fs.rmSync(targetDir, { recursive: true, force: true });
@@ -218,10 +238,8 @@ async function deleteDeployment(id) {
     }
   }
 
-  // 3. Remove entry from deployments array
-  deployments.splice(deploymentIndex, 1);
-  writeMetadata(deployments);
-
+  // 3. Delete record from MongoDB
+  await Deployment.deleteOne({ id });
   return true;
 }
 
@@ -229,5 +247,6 @@ module.exports = {
   createDeployment,
   getAllDeployments,
   getDeployment,
+  restoreFromBackup,
   deleteDeployment,
 };
