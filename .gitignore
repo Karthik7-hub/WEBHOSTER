@@ -1,0 +1,47 @@
+# WebHoster Monorepo Git Ignore Rules
+
+# 1. Package & Dependency Directories
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# 2. Administrative Credentials & Private Configurations (CRITICAL)
+.env
+*.env
+*.env.local
+server/.env
+
+# 3. Dynamic Deployment Sandbox & Upload Stores
+# We ignore all dynamic uploads and extractions but keep the folders using .gitkeep if wanted
+uploads/*
+!uploads/.gitkeep
+deployments/*
+!deployments/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# 4. Production Build Bundles
+dist/
+build/
+client/dist/
+client/build/
+
+# 5. Local Diagnostics & Scratch Files
+/brain/
+.gemini/
+scratch/
+test*.js
+
+# 6. Logs & Audits
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 7. OS caches & IDE preferences
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.swp

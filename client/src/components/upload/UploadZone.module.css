@@ -1,0 +1,215 @@
+.uploadCard {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.dropZone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition-normal), background-color var(--transition-normal), box-shadow var(--transition-normal);
+  overflow: hidden;
+}
+
+.dropZone:hover {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.02);
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.05);
+}
+
+.active {
+  border-color: var(--accent-teal);
+  background: rgba(6, 182, 212, 0.03);
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.1);
+}
+
+.uploading {
+  border-color: var(--accent-purple);
+  background: var(--bg-tertiary);
+  cursor: default;
+}
+
+.fileInput {
+  display: none;
+}
+
+/* Idle Container Styles */
+.idleContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.uploadIconContainer {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-normal);
+}
+
+.dropZone:hover .uploadIconContainer {
+  transform: translateY(-5px);
+  background: rgba(168, 85, 247, 0.05);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+.idleContainer h3 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.idleContainer p.separator {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  margin: 0.5rem 0;
+}
+
+.selectBtn {
+  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-indigo) 100%);
+  color: white;
+  padding: 0.75rem 1.8rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.selectBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
+}
+
+.limitInfo {
+  margin-top: 1.2rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+/* Uploading Progress Styles */
+.progressContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(168, 85, 247, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--accent-purple);
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 1.5rem;
+}
+
+.progressTitle {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.progressSub {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  margin-bottom: 2rem;
+}
+
+.progressBarBg {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.progressBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-purple) 0%, var(--accent-teal) 100%);
+  border-radius: 50px;
+  transition: width 0.3s ease;
+}
+
+.progressPercent {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent-teal);
+}
+
+/* Error Alert Styles */
+.errorAlert {
+  margin-top: 1.5rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.errorIcon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.errorText {
+  flex: 1;
+  text-align: left;
+}
+
+.errorTitle {
+  font-weight: 600;
+  color: #fca5a5;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+
+.errorDesc {
+  font-size: 0.85rem;
+  color: rgba(252, 165, 165, 0.8);
+  line-height: 1.4;
+}
+
+.errorClose {
+  font-size: 1.3rem;
+  color: rgba(252, 165, 165, 0.6);
+  transition: color var(--transition-fast);
+  line-height: 1;
+}
+
+.errorClose:hover {
+  color: #fca5a5;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
