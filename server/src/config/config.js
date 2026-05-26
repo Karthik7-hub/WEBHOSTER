@@ -2,8 +2,8 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-// Define core directory paths relative to project root
-const ROOT_DIR = path.resolve(__dirname, '../../..');
+// Define core directory paths relative to project root (use /tmp on Vercel for write access)
+const ROOT_DIR = process.env.VERCEL ? '/tmp' : path.resolve(__dirname, '../../..');
 const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
 const DEPLOYMENTS_DIR = path.join(ROOT_DIR, 'deployments');
 const TEMP_DIR = path.join(ROOT_DIR, 'temp');
