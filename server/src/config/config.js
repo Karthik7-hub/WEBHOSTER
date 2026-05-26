@@ -11,7 +11,11 @@ const TEMP_DIR = path.join(ROOT_DIR, 'temp');
 // Ensure necessary directories exist
 [UPLOADS_DIR, DEPLOYMENTS_DIR, TEMP_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (err) {
+      console.warn(`Warning: Could not create directory ${dir}. This is expected in read-only environments like Vercel.`);
+    }
   }
 });
 
