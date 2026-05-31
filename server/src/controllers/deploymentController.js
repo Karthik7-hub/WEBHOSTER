@@ -3,7 +3,6 @@ const config = require('../config/config');
 const Deployment = require('../models/Deployment');
 const fs = require('fs');
 const path = require('path');
-const archiver = require('archiver');
 
 /**
  * Handles ZIP file upload and triggers deployment service extraction.
@@ -252,7 +251,8 @@ async function downloadDeploymentZIP(req, res, next) {
     }
 
     res.attachment(`${deployment.name || id}.zip`);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const { ZipArchive } = await import('archiver');
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.pipe(res);
     archive.directory(targetDir, false);
     await archive.finalize();

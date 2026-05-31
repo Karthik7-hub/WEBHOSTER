@@ -395,7 +395,7 @@ async function publishDraftChanges(req, res, next) {
     const { nanoid } = require('nanoid');
     const tempZipPath = path.join(config.paths.temp, `publish-${id}-${nanoid(4)}.zip`);
 
-    const { ZipArchive } = require('archiver');
+    const { ZipArchive } = await import('archiver');
     const zipDirectory = (sourceDir, outPath) => {
       return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(outPath);

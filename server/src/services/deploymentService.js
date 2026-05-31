@@ -3,7 +3,6 @@ const path = require('path');
 const https = require('https');
 const { nanoid } = require('nanoid');
 const unzipper = require('unzipper');
-const { ZipArchive } = require('archiver');
 const config = require('../config/config');
 const zipSecurity = require('../security/zipSecurity');
 const imageKitService = require('./imageKitService');
@@ -101,7 +100,8 @@ async function extractZip(zipPath, targetDir) {
 /**
  * Helper to zip a directory.
  */
-function zipDirectory(sourceDir, outPath) {
+async function zipDirectory(sourceDir, outPath) {
+  const { ZipArchive } = await import('archiver');
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
     const archive = new ZipArchive({

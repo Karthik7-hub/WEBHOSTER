@@ -1096,7 +1096,7 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
   }
 
   // Generate initial ZIP backup and upload to ImageKit
-  const { ZipArchive } = require('archiver');
+  const { ZipArchive } = await import('archiver');
   const imageKitService = require('./imageKitService');
   const tempZipPath = path.join(config.paths.deployments, `temp-${deploymentId}-${Date.now()}.zip`);
 
