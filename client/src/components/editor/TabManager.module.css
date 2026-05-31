@@ -1,0 +1,121 @@
+.tabContainer {
+  display: flex;
+  background: #090d16;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+  user-select: none;
+  height: 38px;
+}
+
+.tabContainer::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tabContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tabsList {
+  display: flex;
+  height: 100%;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: #090d16;
+  color: #64748b;
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  height: 100%;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.01);
+  color: #cbd5e1;
+}
+
+.tabActive {
+  background: rgba(15, 23, 42, 0.6) !important;
+  color: #ffffff !important;
+  border-bottom: 2px solid #a855f7;
+}
+
+.tabContent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tabName {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  position: relative;
+  outline: none;
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* Hover swap: show X on hover even if unsaved changes are active */
+.hoverCloseIcon {
+  display: none !important;
+}
+
+.closeBtn:hover svg {
+  display: block !important;
+}
+
+.closeBtn:hover .unsavedDot {
+  display: none !important;
+}
+
+/* Unsaved Dot styling */
+.unsavedDot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: #a855f7;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #a855f7;
+}
+
+.unsaved svg {
+  display: none;
+}
+
+.emptyTabs {
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+  color: #475569;
+  font-size: 0.8rem;
+  font-style: italic;
+  background: #090d16;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  height: 38px;
+}

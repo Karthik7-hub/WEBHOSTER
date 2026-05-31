@@ -94,6 +94,22 @@ export const getDeployments = async () => {
 };
 
 /**
+ * Retrieves aggregate platform statistics.
+ */
+export const getPlatformStats = async () => {
+  const response = await apiClient.get('/stats');
+  return response.data;
+};
+
+/**
+ * Updates administrative user credentials.
+ */
+export const updateCredentials = async (currentPassword, newUsername, newPassword) => {
+  const response = await apiClient.put('/auth/credentials', { currentPassword, newUsername, newPassword });
+  return response.data;
+};
+
+/**
  * Returns details for a specific deployment.
  */
 export const getDeployment = async (id) => {
@@ -109,4 +125,130 @@ export const deleteDeployment = async (id) => {
   return response.data;
 };
 
+/**
+ * Creates a new project from a template.
+ */
+export const createProject = async (name, template) => {
+  const response = await apiClient.post('/projects/create', { name, template });
+  return response.data;
+};
+
+/**
+ * Redeploys a project from the editor.
+ */
+export const deployProject = async (id) => {
+  const response = await apiClient.post(`/projects/${id}/deploy`);
+  return response.data;
+};
+
+/**
+ * Performs lexical search over filenames and text contents.
+ */
+export const searchFiles = async (id, query) => {
+  const response = await apiClient.get(`/projects/${id}/search`, { params: { query } });
+  return response.data;
+};
+
+/**
+ * Retrieves the recursive file hierarchy tree for the project.
+ */
+export const getFiles = async (id) => {
+  const response = await apiClient.get(`/projects/${id}/files`);
+  return response.data;
+};
+
+/**
+ * Reads a single file's content.
+ */
+export const getFileContent = async (id, filePath) => {
+  const response = await apiClient.get(`/projects/${id}/files/content`, { params: { path: filePath } });
+  return response.data;
+};
+
+/**
+ * Overwrites text file content.
+ */
+export const saveFileContent = async (id, filePath, content) => {
+  const response = await apiClient.put(`/projects/${id}/files/content`, { path: filePath, content });
+  return response.data;
+};
+
+/**
+ * Creates an empty file or folder.
+ */
+export const createFileOrFolder = async (id, filePath, isFolder) => {
+  const response = await apiClient.post(`/projects/${id}/files/create`, { path: filePath, isFolder });
+  return response.data;
+};
+
+/**
+ * Deletes a file or directory recursively.
+ */
+export const deleteFileOrFolder = async (id, filePath) => {
+  const response = await apiClient.delete(`/projects/${id}/files/delete`, { params: { path: filePath } });
+  return response.data;
+};
+
+/**
+ * Renames a file or folder.
+ */
+export const renameFileOrFolder = async (id, oldPath, newPath) => {
+  const response = await apiClient.post(`/projects/${id}/files/rename`, { oldPath, newPath });
+  return response.data;
+};
+
+/**
+ * Retrieves aggregate platform storage sizes and stale folders lists.
+ */
+export const getStorageAnalytics = async () => {
+  const response = await apiClient.get('/deployments/storage-analytics');
+  return response.data;
+};
+
+/**
+ * Quarantines stale local deployment folders (supports dryRun=true).
+ */
+export const cleanupStaleDeployments = async (dryRun = false) => {
+  const response = await apiClient.post(`/deployments/cleanup-stale?dryRun=${dryRun}`);
+  return response.data;
+};
+
+/**
+ * Restores a folder from quarantine back to the live deployments directory.
+ */
+export const restoreQuarantine = async (id) => {
+  const response = await apiClient.post(`/deployments/trash/${id}/restore`);
+  return response.data;
+};
+
+export const purgeQuarantine = async (id) => {
+  const response = await apiClient.delete(`/deployments/trash/${id}/delete-permanently`);
+  return response.data;
+};
+
+/**
+ * Commits draft changes, updates live deployment directory, and logs a new version.
+ */
+export const publishDraft = async (id) => {
+  const response = await apiClient.post(`/projects/${id}/publish`);
+  return response.data;
+};
+
+/**
+ * Retrieves the version logs for a specific project.
+ */
+export const getVersionHistory = async (id) => {
+  const response = await apiClient.get(`/projects/${id}/versions`);
+  return response.data;
+};
+
+/**
+ * Rolls back both drafts and live production workspaces to a previous Version.
+ */
+export const rollbackToVersion = async (id, versionNumber) => {
+  const response = await apiClient.post(`/projects/${id}/rollback`, { versionNumber });
+  return response.data;
+};
+
 export default apiClient;
+

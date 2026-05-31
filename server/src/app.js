@@ -68,14 +68,27 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/p/*', serveDeployedSite);
 
 const authRoutes = require('./routes/authRoutes');
+const projectRoutes = require('./routes/projectRoutes');
 
 // 7. Core API Routes
 app.use('/api', deploymentRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
 
 // 8. Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', time: new Date() });
+});
+
+// Serve static frontend bundle
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
+// Fallback all SPA routes to index.html (History API fallback)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/p/')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
 });
 
 // 9. Global Error Handling Middleware

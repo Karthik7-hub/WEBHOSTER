@@ -30,13 +30,13 @@ p {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-indigo) 50%, var(--accent-teal) 100%);
+  background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.text-gradient-pink {
-  background: linear-gradient(135deg, var(--accent-pink) 0%, var(--accent-purple) 100%);
+.text-gradient-alt {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }

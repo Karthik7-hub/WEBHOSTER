@@ -3,7 +3,7 @@ const authSessions = require('../security/authSessions');
 /**
  * Express middleware to restrict operations to authenticated admins.
  */
-function requireAdminAuth(req, res, next) {
+async function requireAdminAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
@@ -15,15 +15,17 @@ function requireAdminAuth(req, res, next) {
     }
 
     const token = authHeader.split(' ')[1];
+    const session = await authSessions.isValidSession(token);
 
-    if (!authSessions.isValidSession(token)) {
+    if (!session) {
       return res.status(401).json({
         success: false,
         error: 'Authentication Exception: Session has expired or is invalid. Please log in again.',
       });
     }
 
-    // Token is valid, proceed
+    // Token is valid, proceed with enriched request context
+    req.username = session.username;
     next();
   } catch (error) {
     console.error('Error in requireAdminAuth middleware:', error);

@@ -61,7 +61,14 @@ const requireAdminAuth = require('../middleware/authMiddleware');
 // 4. Register Endpoints
 router.post('/deploy', requireAdminAuth, upload.single('file'), controller.deployZIP);
 router.get('/deployments', requireAdminAuth, controller.getDeployments);
+router.get('/stats', requireAdminAuth, controller.getPlatformStats);
+router.get('/deployments/storage-analytics', requireAdminAuth, controller.getPlatformStorageAnalytics);
+router.post('/deployments/cleanup-stale', requireAdminAuth, controller.cleanupStaleDeployments);
+router.post('/deployments/trash/:id/restore', requireAdminAuth, controller.restoreTrash);
+router.delete('/deployments/trash/:id/delete-permanently', requireAdminAuth, controller.deleteTrashPermanently);
 router.get('/deployments/:id', requireAdminAuth, controller.getDeploymentById);
+router.get('/deployments/:id/download', requireAdminAuth, controller.downloadDeploymentZIP);
 router.delete('/deployments/:id', requireAdminAuth, controller.deleteDeployment);
 
 module.exports = router;
+

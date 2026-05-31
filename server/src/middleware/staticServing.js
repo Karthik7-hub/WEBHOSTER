@@ -102,20 +102,65 @@ async function serveDeployedSite(req, res, next) {
   }
 
   // 3. Resolve file path in deployments directory
-  const baseDeploymentDir = path.join(config.paths.deployments, deploymentId);
+  // 3. Resolve file path in deployments directory (serve from drafts if preview mode is active)
+  const isPreview = req.query.preview === 'true' || (req.headers.referer && req.headers.referer.includes('preview=true'));
+  const baseDeploymentDir = isPreview
+    ? path.join(config.paths.deployments, '.drafts', deploymentId)
+    : path.join(config.paths.deployments, deploymentId);
 
   // Lazy ZIP restoration if the folder was deleted (cold cache inside ephemeral Vercel /tmp)
   if (!fs.existsSync(baseDeploymentDir)) {
-    if (!deployment.backupUrl) {
-      console.error(`[ERROR] Unable to restore deployment ${deploymentId}: backup URL is missing.`);
-      return res.status(404).send('Deployment files not found locally and no backup exists.');
-    }
+    if (isPreview) {
+      const liveDir = path.join(config.paths.deployments, deploymentId);
+      if (fs.existsSync(liveDir)) {
+        console.log(`[staticServing] Dynamically cloning live files to drafts for ${deploymentId}`);
+        fs.mkdirSync(baseDeploymentDir, { recursive: true });
+        const copyRecursiveSync = (src, dest) => {
+          if (fs.statSync(src).isDirectory()) {
+            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+            fs.readdirSync(src).forEach((childItemName) => {
+              copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+            });
+          } else {
+            fs.copyFileSync(src, dest);
+          }
+        };
+        copyRecursiveSync(liveDir, baseDeploymentDir);
+      } else {
+        if (!deployment.backupUrl) {
+          return res.status(404).send('Deployment files not found.');
+        }
+        try {
+          await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
+          fs.mkdirSync(baseDeploymentDir, { recursive: true });
+          const copyRecursiveSync = (src, dest) => {
+            if (fs.statSync(src).isDirectory()) {
+              if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+              fs.readdirSync(src).forEach((childItemName) => {
+                copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+              });
+            } else {
+              fs.copyFileSync(src, dest);
+            }
+          };
+          copyRecursiveSync(liveDir, baseDeploymentDir);
+        } catch (err) {
+          console.error(`[ERROR] Draft lazy restoration failed for ${deploymentId}:`, err);
+          return res.status(500).send('Error restoring files.');
+        }
+      }
+    } else {
+      if (!deployment.backupUrl) {
+        console.error(`[ERROR] Unable to restore deployment ${deploymentId}: backup URL is missing.`);
+        return res.status(404).send('Deployment files not found locally and no backup exists.');
+      }
 
-    try {
-      await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
-    } catch (restoreError) {
-      console.error(`[ERROR] Lazy restoration failed for ${deploymentId}:`, restoreError);
-      return res.status(500).send('Error unzipping deployment files from persistent storage.');
+      try {
+        await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
+      } catch (restoreError) {
+        console.error(`[ERROR] Lazy restoration failed for ${deploymentId}:`, restoreError);
+        return res.status(500).send('Error unzipping deployment files from persistent storage.');
+      }
     }
   }
   
@@ -172,8 +217,6 @@ async function serveDeployedSite(req, res, next) {
   }
 
   // Set sandboxing headers so that deployed user-code cannot hijack cookies/storage of the main panel.
-  // Allow iframe rendering so that we can show previews inside our main panel.
-  res.setHeader('X-Frame-Options', 'ALLOW-FROM ' + config.frontendUrl);
   res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' *; img-src * data:; media-src *; connect-src *; style-src 'self' 'unsafe-inline' *;");
 
   // Send file with correct content type auto-detection

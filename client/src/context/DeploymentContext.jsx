@@ -58,7 +58,11 @@ export const DeploymentProvider = ({ children }) => {
         const verifyRes = await api.verifyToken();
         if (verifyRes.success && verifyRes.isValid) {
           setIsAuthenticated(true);
-          setAdminUser(storedUser || 'admin');
+          const currentUsername = verifyRes.username || storedUser || 'admin';
+          setAdminUser(currentUsername);
+          if (verifyRes.username && verifyRes.username !== storedUser) {
+            localStorage.setItem('webhoster_user', verifyRes.username);
+          }
           await fetchDeployments();
         } else {
           // Token is invalid, wipe local storage
@@ -182,6 +186,7 @@ export const DeploymentProvider = ({ children }) => {
         isAuthenticated,
         authLoading,
         adminUser,
+        setAdminUser,
         fetchDeployments,
         uploadAndDeploy,
         removeDeployment,

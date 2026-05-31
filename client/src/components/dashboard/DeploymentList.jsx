@@ -1,27 +1,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDeployments } from '../../context/DeploymentContext';
-import { Search, Package, Globe, Copy, Check, ExternalLink, Trash2 } from 'lucide-react';
+import { Package, Globe, Plus, X } from 'lucide-react';
+import GlassConfirmModal from '../ui/GlassConfirmModal';
 import styles from './DeploymentList.module.css';
 
-export default function DeploymentList() {
+export default function DeploymentList({ onCreateClick }) {
   const { deployments, loading, removeDeployment } = useDeployments();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('newest'); // newest, oldest, files
-  const [copiedId, setCopiedId] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  
+  // Storage ZIP Download and Error states
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [errorAlertOpen, setErrorAlertOpen] = useState(false);
+  const [errorAlertMsg, setErrorAlertMsg] = useState('');
   const navigate = useNavigate();
 
-  // 1. Copy URL Helper
-  const handleCopy = async (id, url, e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy text:', err);
-    }
+  // 1. Project Friendly Naming Formatting
+  const formatProjectName = (slug) => {
+    if (!slug) return '';
+    return slug
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   // 2. Format Timestamp Helper
@@ -43,32 +43,55 @@ export default function DeploymentList() {
     });
   };
 
-  // 3. Search and Sort Filter Algorithms
-  const filteredDeployments = deployments
-    .filter((d) => {
-      const matchName = d.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchId = d.id.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchName || matchId;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'newest') {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      }
-      if (sortBy === 'oldest') {
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      }
-      if (sortBy === 'files') {
-        return b.fileCount - a.fileCount;
-      }
-      return 0;
-    });
+  // 3. Sort Filter Algorithm (Newest first)
+  const filteredDeployments = [...deployments].sort((a, b) => {
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
 
   // 4. Safe Delete Trigger
-  const handleDelete = async (id, name, e) => {
+  const handleDelete = (id, name, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm(`Are you absolutely sure you want to permanently delete the website "${name}"?`)) {
-      await removeDeployment(id);
+    setProjectToDelete({ id, name });
+    setDeleteModalOpen(true);
+  };
+
+  // 5. Secure ZIP Packaging Downloader (Falls back to CDN backupUrl if available)
+  const handleDownloadZip = async (id, backupUrl, name, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (backupUrl) {
+      window.open(backupUrl, '_blank');
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const token = localStorage.getItem('webhoster_token');
+      const response = await fetch(`/api/deployments/${id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to pack static resources from the server.');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${name}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      setErrorAlertMsg('Failed to package static project files. Please make sure the server is online.');
+      setErrorAlertOpen(true);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -84,28 +107,16 @@ export default function DeploymentList() {
   return (
     <div className={styles.historySection}>
       <div className={styles.sectionHeader}>
-        <h2>Your Deployments</h2>
-        <div className={styles.controls}>
-          <div className={styles.searchWrapper}>
-            <Search size={16} className={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="Search deployments..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={styles.searchInput}
-            />
-          </div>
-
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className={styles.sortSelect}
+        <div className={styles.titleRow}>
+          <h2>Projects</h2>
+          <button 
+            type="button" 
+            className={styles.createBtn}
+            onClick={onCreateClick}
           >
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="files">Most Files</option>
-          </select>
+            <Plus size={15} />
+            <span>New Project</span>
+          </button>
         </div>
       </div>
 
@@ -114,17 +125,12 @@ export default function DeploymentList() {
           <Package size={48} className={styles.emptyIcon} />
           <h3>No static hosting found</h3>
           <p>
-            {searchTerm 
-              ? 'No deployments match your search filter.' 
-              : 'Upload a static site ZIP archive above to instantly see your hosted website list!'}
+            Create a new project or upload a static site ZIP archive to instantly see your hosted website list!
           </p>
         </div>
       ) : (
         <div className={styles.grid}>
           {filteredDeployments.map((deployment) => {
-            // Strip http:// or https:// for clean visual presentation
-            const displayUrl = deployment.publicUrl.replace(/^https?:\/\//, '');
-
             return (
               <div 
                 key={deployment.id} 
@@ -138,69 +144,43 @@ export default function DeploymentList() {
                   }
                 }}
               >
-                <div className={styles.cardBody}>
-                  <div className={styles.cardHeader}>
-                    <div className={styles.projectTitle}>
-                      <h4>{deployment.name}</h4>
-                      <span className={styles.projectId}>{deployment.id}</span>
-                    </div>
-                    
-                    <span className={styles.statusBadge}>Active</span>
-                  </div>
-
-                  <div className={styles.cardMetrics}>
-                    <div className={styles.metric}>
-                      <span className={styles.metricLabel}>Resources:</span>
-                      <span className={styles.metricVal}>{deployment.fileCount} files</span>
-                    </div>
-                    <div className={styles.metric}>
-                      <span className={styles.metricLabel}>Created:</span>
-                      <span className={styles.metricVal}>{formatTime(deployment.createdAt)}</span>
-                    </div>
-                  </div>
-
-                  <div className={styles.urlRow}>
-                    <Globe size={14} className={styles.globeIcon} />
-                    <span className={styles.urlText}>{displayUrl}</span>
+                <div className={styles.cardContent}>
+                  <h4 className={styles.cardTitle}>{formatProjectName(deployment.name)}</h4>
+                  <div className={styles.cardMetaInline}>
+                    Created {formatTime(deployment.createdAt)} • {deployment.fileCount} {deployment.fileCount === 1 ? 'File' : 'Files'}
                   </div>
                 </div>
 
-                <div className={styles.cardActions}>
+                <div className={styles.cardActionsPill}>
                   <button
                     type="button"
-                    className={styles.actionBtn}
-                    onClick={(e) => handleCopy(deployment.id, deployment.publicUrl, e)}
+                    className={`${styles.pillBtn} ${styles.primaryPill}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(`/project/${deployment.id}/edit`, '_blank');
+                    }}
                   >
-                    {copiedId === deployment.id ? (
-                      <>
-                        <Check size={13} className={styles.copiedColor} />
-                        <span className={styles.copiedColor}>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={13} />
-                        <span>Copy Link</span>
-                      </>
-                    )}
+                    Open Editor
                   </button>
                   
                   <a
                     href={deployment.publicUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`${styles.actionBtn} ${styles.primaryActionBtn}`}
+                    className={`${styles.pillBtn} ${styles.outlinePill}`}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <ExternalLink size={13} />
-                    <span>Visit Site</span>
+                    Visit Site
                   </a>
 
                   <button
                     type="button"
-                    className={`${styles.actionBtn} ${styles.deleteActionBtn}`}
-                    onClick={(e) => handleDelete(deployment.id, deployment.name, e)}
+                    className={`${styles.pillBtn} ${styles.outlinePill}`}
+                    onClick={(e) => handleDownloadZip(deployment.id, deployment.backupUrl, deployment.name, e)}
+                    disabled={isDownloading}
                   >
-                    <Trash2 size={13} />
+                    Download ZIP
                   </button>
                 </div>
               </div>
@@ -208,6 +188,37 @@ export default function DeploymentList() {
           })}
         </div>
       )}
+
+      <GlassConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setProjectToDelete(null);
+        }}
+        onConfirm={async () => {
+          if (projectToDelete) {
+            await removeDeployment(projectToDelete.id);
+          }
+        }}
+        title="Delete Project?"
+        message={`This project "${formatProjectName(projectToDelete?.name || '')}" will be moved to Deleted Projects (Trash Bin) and can be restored for 7 days.`}
+        confirmLabel="Delete Project"
+        cancelLabel="Cancel"
+        type="danger"
+        isDestructive={true}
+      />
+
+      <GlassConfirmModal
+        isOpen={errorAlertOpen}
+        onClose={() => {
+          setErrorAlertOpen(false);
+          setErrorAlertMsg('');
+        }}
+        title="Download Error"
+        message={errorAlertMsg}
+        confirmLabel="OK"
+        type="warning"
+      />
     </div>
   );
 }

@@ -1,46 +1,30 @@
-/**
- * In-memory registry for managing active authenticated dashboard sessions.
- */
-const activeSessions = new Map(); // token -> { username, createdAt }
-
-// Session validity lifespan: 24 hours (in milliseconds)
-const SESSION_LIFESPAN = 24 * 60 * 60 * 1000;
+const Session = require('../models/Session');
 
 /**
- * Registers a new session with an active token.
+ * Registers a new session with an active token in MongoDB.
  */
-function addSession(token, username) {
-  activeSessions.set(token, {
-    username,
-    createdAt: Date.now(),
-  });
+async function addSession(token, username) {
+  return await Session.create({ token, username });
 }
 
 /**
- * Validates whether an incoming token matches an active and non-expired session.
+ * Validates whether an incoming token matches an active session.
+ * Returns the session document if valid, and null otherwise.
  */
-function isValidSession(token) {
-  if (!token || !activeSessions.has(token)) {
-    return false;
+async function isValidSession(token) {
+  if (!token) {
+    return null;
   }
-
-  const session = activeSessions.get(token);
-  const isExpired = Date.now() - session.createdAt > SESSION_LIFESPAN;
-
-  if (isExpired) {
-    activeSessions.delete(token);
-    return false;
-  }
-
-  return true;
+  // MongoDB TTL index handles automatic removal of expired sessions.
+  return await Session.findOne({ token });
 }
 
 /**
  * Revokes a session token immediately on logout.
  */
-function removeSession(token) {
+async function removeSession(token) {
   if (token) {
-    activeSessions.delete(token);
+    await Session.deleteOne({ token });
   }
 }
 

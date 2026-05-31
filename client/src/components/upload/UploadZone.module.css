@@ -23,19 +23,19 @@
 }
 
 .dropZone:hover {
-  border-color: var(--accent-purple);
-  background: rgba(168, 85, 247, 0.02);
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.05);
+  border-color: var(--accent-secondary);
+  background: var(--accent-secondary-muted);
+  box-shadow: 0 0 30px var(--accent-secondary-muted);
 }
 
 .active {
-  border-color: var(--accent-teal);
-  background: rgba(6, 182, 212, 0.03);
-  box-shadow: 0 0 30px rgba(6, 182, 212, 0.1);
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-muted);
+  box-shadow: 0 0 30px var(--accent-primary-muted);
 }
 
 .uploading {
-  border-color: var(--accent-purple);
+  border-color: var(--accent-secondary);
   background: var(--bg-tertiary);
   cursor: default;
 }
@@ -68,8 +68,8 @@
 
 .dropZone:hover .uploadIconContainer {
   transform: translateY(-5px);
-  background: rgba(168, 85, 247, 0.05);
-  border-color: rgba(168, 85, 247, 0.2);
+  background: var(--accent-secondary-muted);
+  border-color: var(--accent-secondary-muted);
 }
 
 .idleContainer h3 {
@@ -86,19 +86,19 @@
 }
 
 .selectBtn {
-  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-indigo) 100%);
+  background: var(--accent-gradient);
   color: white;
   padding: 0.75rem 1.8rem;
   border-radius: var(--radius-md);
   font-weight: 600;
   font-size: 0.95rem;
-  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 15px var(--accent-secondary-muted);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .selectBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
+  box-shadow: 0 6px 20px var(--accent-secondary-muted);
 }
 
 .limitInfo {
@@ -119,9 +119,9 @@
 .spinner {
   width: 44px;
   height: 44px;
-  border: 3px solid rgba(168, 85, 247, 0.1);
+  border: 3px solid var(--accent-secondary-muted);
   border-radius: 50%;
-  border-top-color: var(--accent-purple);
+  border-top-color: var(--accent-secondary);
   animation: spin 1s ease-in-out infinite;
   margin-bottom: 1.5rem;
 }
@@ -150,7 +150,7 @@
 
 .progressBarFill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-purple) 0%, var(--accent-teal) 100%);
+  background: var(--accent-gradient);
   border-radius: 50px;
   transition: width 0.3s ease;
 }
@@ -158,7 +158,7 @@
 .progressPercent {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--accent-teal);
+  color: var(--accent-primary);
 }
 
 /* Error Alert Styles */

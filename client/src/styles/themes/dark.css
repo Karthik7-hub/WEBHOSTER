@@ -1,46 +1,72 @@
-:root {
-  /* Color Palette */
-  --bg-primary: #0a0812;
-  --bg-secondary: rgba(255, 255, 255, 0.03);
-  --bg-tertiary: rgba(14, 11, 26, 0.6);
-  --bg-card: rgba(20, 16, 36, 0.4);
-  
-  --accent-purple: #a855f7;
-  --accent-purple-glow: rgba(168, 85, 247, 0.15);
-  --accent-indigo: #6366f1;
-  --accent-teal: #06b6d4;
-  --accent-teal-glow: rgba(6, 182, 212, 0.15);
-  --accent-pink: #ec4899;
-  --accent-pink-glow: rgba(236, 72, 153, 0.15);
-  
-  --status-success: #10b981;
-  --status-warning: #f59e0b;
-  --status-error: #ef4444;
-  
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.65);
-  --text-tertiary: rgba(255, 255, 255, 0.4);
-  
+/* ═══════════════════════════════════════════════════════
+   Dark Theme — WebHoster Professional SaaS Design System
+   ═══════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ── Backgrounds ── */
+  --bg-primary: #0A0A0B;
+  --bg-secondary: #111113;
+  --bg-tertiary: #18181B;
+  --bg-card: rgba(24, 24, 27, 0.75);
+  --bg-input: #0A0A0B;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+
+  /* ── Accent: Primary (Professional Blue) ── */
+  --accent-primary: #63d7f1;
+  --accent-primary-hover: #7ee0f5;
+  --accent-primary-muted: rgba(99, 215, 241, 0.15);
+
+  /* ── Accent: Secondary (Purple) ── */
+  --accent-secondary: #8B5CF6;
+  --accent-secondary-hover: #A78BFA;
+  --accent-secondary-muted: rgba(139, 92, 246, 0.15);
+
+  /* ── Gradient ── */
+  --accent-gradient: linear-gradient(135deg, #63d7f1 0%, #8B5CF6 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #7ee0f5 0%, #A78BFA 100%);
+
+  /* ── Status ── */
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+  --status-error: #EF4444;
+  --status-info: #63d7f1;
+
+  /* ── Text ── */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+
+  /* ── Borders ── */
   --border-color: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(168, 85, 247, 0.25);
-  --border-focus: rgba(6, 182, 212, 0.5);
-  
-  /* Layout and Effects */
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.45);
-  
-  --glass-blur: blur(16px);
-  --glass-bg: rgba(255, 255, 255, 0.02);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.07);
-  
-  /* Animations */
-  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  /* Borders */
-  --radius-lg: 20px;
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-focus: var(--accent-primary);
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+
+  /* ── Glass ── */
+  --glass-blur: blur(12px);
+  --glass-bg: rgba(10, 10, 11, 0.7);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* ── Animations ── */
+  --transition-fast: 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Border Radius ── */
+  --radius-lg: 16px;
   --radius-md: 12px;
-  --radius-sm: 8px;
+  --radius-sm: 10px;
+
+  /* ── Scrollbar ── */
+  --scrollbar-track: var(--bg-primary);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: var(--accent-primary);
 }

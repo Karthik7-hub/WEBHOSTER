@@ -1,5 +1,9 @@
 const deploymentService = require('../services/deploymentService');
 const config = require('../config/config');
+const Deployment = require('../models/Deployment');
+const fs = require('fs');
+const path = require('path');
+const archiver = require('archiver');
 
 /**
  * Handles ZIP file upload and triggers deployment service extraction.
@@ -120,9 +124,143 @@ async function deleteDeployment(req, res, next) {
   }
 }
 
+/**
+ * Retrieves aggregate platform statistics.
+ */
+async function getPlatformStats(req, res, next) {
+  try {
+    const totalProjects = await Deployment.countDocuments();
+    
+    const stats = await Deployment.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalFiles: { $sum: '$fileCount' },
+        },
+      },
+    ]);
+    const totalFiles = stats.length > 0 ? stats[0].totalFiles : 0;
+
+    const latestDeployment = await Deployment.findOne().sort({ createdAt: -1 });
+    const latestDeployAt = latestDeployment ? latestDeployment.createdAt : null;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalProjects,
+        totalFiles,
+        latestDeployAt,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching platform statistics:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch platform statistics.',
+    });
+  }
+}
+
 module.exports = {
   deployZIP,
   getDeployments,
   getDeploymentById,
   deleteDeployment,
+  getPlatformStats,
+  getPlatformStorageAnalytics,
+  cleanupStaleDeployments,
+  restoreTrash,
+  deleteTrashPermanently,
+  downloadDeploymentZIP
 };
+
+async function getPlatformStorageAnalytics(req, res, next) {
+  try {
+    const stats = await deploymentService.getStorageAnalytics();
+    return res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error('Error fetching platform storage analytics:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch platform storage analytics.',
+    });
+  }
+}
+
+async function cleanupStaleDeployments(req, res, next) {
+  try {
+    const dryRun = req.query.dryRun === 'true';
+    const performedBy = req.user ? req.user.username : 'admin';
+
+    const result = await deploymentService.moveInactiveToTrash(dryRun, performedBy);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in cleanupStaleDeployments controller:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to trigger platform cleanup.',
+    });
+  }
+}
+
+async function restoreTrash(req, res, next) {
+  try {
+    const { id } = req.params;
+    const performedBy = req.user ? req.user.username : 'admin';
+
+    const result = await deploymentService.restoreTrashFolder(id, performedBy);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in restoreTrash controller:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to restore deleted deployment folder.',
+    });
+  }
+}
+
+async function deleteTrashPermanently(req, res, next) {
+  try {
+    const { id } = req.params;
+    const performedBy = req.user ? req.user.username : 'admin';
+
+    const result = await deploymentService.deleteTrashFolderPermanently(id, performedBy);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in deleteTrashPermanently controller:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to permanently delete deployment folder.',
+    });
+  }
+}
+
+async function downloadDeploymentZIP(req, res, next) {
+  try {
+    const { id } = req.params;
+    const deployment = await Deployment.findOne({ id });
+    if (!deployment) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const targetDir = path.join(config.paths.deployments, id);
+    if (!fs.existsSync(targetDir)) {
+      return res.status(404).json({ success: false, error: 'Project files not found on disk.' });
+    }
+
+    res.attachment(`${deployment.name || id}.zip`);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.pipe(res);
+    archive.directory(targetDir, false);
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error downloading deployment ZIP:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: 'Failed to package project files.' });
+    }
+  }
+}
+

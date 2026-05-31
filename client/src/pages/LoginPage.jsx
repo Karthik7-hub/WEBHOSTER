@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDeployments } from '../context/DeploymentContext';
-import { Lock, User, KeyRound, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Mail, Key, Zap, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import Button from '../components/ui/Button';
 import styles from './LoginPage.module.css';
 
 export default function LoginPage() {
@@ -19,7 +21,7 @@ export default function LoginPage() {
     setError(null);
 
     if (!username.trim() || !password.trim()) {
-      setLocalError('Please enter both username and password.');
+      setLocalError('Please enter both email and password.');
       return;
     }
 
@@ -39,68 +41,99 @@ export default function LoginPage() {
 
   return (
     <div className={styles.loginWrapper}>
-      <div className="glowing-bg"></div>
-      
-      <div className={`${styles.loginCard} ${localError ? styles.shake : ''}`}>
-        <div className={styles.iconContainer}>
-          <Lock size={32} className={styles.lockIcon} />
+      {/* LEFT COLUMN: BRANDING & GLOWS */}
+      <div className={styles.brandingColumn}>
+        <div className={styles.glowingBg}>
+          <div className={styles.glowPurple}></div>
+          <div className={styles.glowBlue}></div>
         </div>
 
-        <div className={styles.headerArea}>
-          <h1>WebHoster Login</h1>
-          <p>Provide administration credentials to manage deployments</p>
+        <div className={styles.brandingContent}>
+          <div className={styles.brandTitle}>
+            <Zap size={38} className={styles.logoIcon} />
+            <span className={styles.logoText}>Web<span className={styles.logoHighlight}>Hoster</span></span>
+          </div>
+
+          <h2 className={styles.brandingHeadline}>
+            Build, edit, deploy, and manage static websites
+          </h2>
+
+          <div className={styles.featuresPills}>
+            <span className={styles.featurePill}>Instant Deployments</span>
+            <span className={styles.featurePill}>Browser-Based IDE</span>
+            <span className={styles.featurePill}>Global CDN</span>
+          </div>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className={styles.form}>
-          {localError && (
-            <div className={styles.errorAlert}>
-              <AlertCircle size={16} />
-              <span>{localError}</span>
+      {/* RIGHT COLUMN: LOGIN FORM */}
+      <div className={styles.formColumn}>
+        <motion.div 
+          className={`${styles.loginCard} ${localError ? styles.shake : ''}`}
+          initial={{ opacity: 0, scale: 0.96, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', duration: 0.5 }}
+        >
+          <div className={styles.cardHeader}>
+            <div className={styles.cardBrand}>
+              <Zap size={22} className={styles.cardLogoIcon} />
+              <span className={styles.cardLogoText}>Web<span className={styles.logoHighlight}>Hoster</span></span>
             </div>
-          )}
-
-          <div className={styles.inputGroup}>
-            <label htmlFor="username">Username</label>
-            <div className={styles.inputField}>
-              <User size={16} className={styles.inputIcon} />
-              <input
-                type="text"
-                id="username"
-                placeholder="admin"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-                autoComplete="off"
-              />
-            </div>
+            <h1 className={styles.welcomeTitle}>Welcome Back</h1>
+            <p className={styles.welcomeSubtitle}>Sign in to manage your projects</p>
           </div>
 
-          <div className={styles.inputGroup}>
-            <label htmlFor="password">Password</label>
-            <div className={styles.inputField}>
-              <KeyRound size={16} className={styles.inputIcon} />
-              <input
-                type="password"
-                id="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <button type="submit" className={styles.submitBtn} disabled={loading}>
-            {loading ? (
-              <span className={styles.spinner}></span>
-            ) : (
-              <>
-                <ShieldCheck size={16} />
-                <span>Authenticate Session</span>
-              </>
+          <form onSubmit={handleSubmit} className={styles.form}>
+            {localError && (
+              <div className={styles.errorAlert}>
+                <AlertCircle size={16} />
+                <span>{localError}</span>
+              </div>
             )}
-          </button>
-        </form>
+
+            <div className={styles.inputGroup}>
+              <div className={styles.inputField}>
+                <Mail size={16} className={styles.inputIcon} />
+                <input
+                  type="text"
+                  id="username"
+                  placeholder="Email Address"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
+                  autoComplete="off"
+                  className={styles.input}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className={styles.inputGroup}>
+              <div className={styles.inputField}>
+                <Key size={16} className={styles.inputIcon} />
+                <input
+                  type="password"
+                  id="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className={styles.input}
+                  required
+                />
+              </div>
+            </div>
+
+            <Button 
+              type="submit" 
+              variant="primary" 
+              loading={loading}
+              className={styles.submitBtn}
+            >
+              Sign In
+            </Button>
+          </form>
+        </motion.div>
       </div>
     </div>
   );

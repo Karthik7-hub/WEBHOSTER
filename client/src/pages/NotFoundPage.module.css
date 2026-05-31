@@ -23,8 +23,8 @@
 }
 
 .icon {
-  color: var(--accent-purple);
-  filter: drop-shadow(0 0 10px var(--accent-purple));
+  color: var(--accent-secondary);
+  filter: drop-shadow(0 0 10px var(--accent-secondary-muted));
   margin-bottom: 1.5rem;
   animation: pulse-icon 2s infinite ease-in-out;
 }
@@ -33,7 +33,7 @@
   font-size: 4rem;
   font-weight: 800;
   margin: 0;
-  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-pink) 100%);
+  background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -52,20 +52,21 @@
 }
 
 .btn {
-  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-indigo) 100%);
+  background: var(--accent-gradient);
   color: white;
   padding: 0.8rem 2rem;
   border-radius: var(--radius-md);
   font-weight: 600;
   font-size: 0.95rem;
-  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 15px var(--accent-secondary-muted);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
   display: inline-block;
 }
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
+  background: var(--accent-gradient-hover);
+  box-shadow: 0 6px 20px var(--accent-secondary-muted);
 }
 
 @keyframes pulse-icon {

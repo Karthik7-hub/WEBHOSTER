@@ -1,0 +1,485 @@
+.explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  backdrop-filter: var(--glass-blur);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  color: #e2e8f0;
+  user-select: none;
+}
+
+.explorerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.explorerTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.headerButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.headerButtons button {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.headerButtons button:hover {
+  background: var(--accent-secondary-muted);
+  border-color: var(--accent-secondary);
+  color: #ffffff;
+}
+
+.searchBar {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.searchInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: #64748b;
+}
+
+.searchInput {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px 8px 32px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.searchInput:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 10px var(--accent-primary-muted);
+}
+
+.clearSearchBtn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.clearSearchBtn:hover {
+  color: #ffffff;
+}
+
+.filesSection {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.filesSection::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filesSection::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.fileTree {
+  display: flex;
+  flex-direction: column;
+}
+
+.treeNode {
+  display: flex;
+  flex-direction: column;
+}
+
+.nodeRow {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  cursor: pointer;
+  position: relative;
+  padding-right: 8px;
+}
+
+.nodeRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nodeRowActive {
+  background: var(--accent-secondary-muted) !important;
+  border-left: 2px solid var(--accent-secondary);
+}
+
+.chevronBtn {
+  background: none;
+  border: none;
+  color: #64748b;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.chevronBtn:hover {
+  color: #ffffff;
+}
+
+.indentSpacer {
+  width: 22px;
+  display: inline-block;
+}
+
+.nodeLabel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 100%;
+}
+
+.nodeRowActive .nodeLabel {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.folderIcon {
+  color: #e2b714;
+}
+
+.folderIconOpen {
+  color: #f3c617;
+}
+
+.nodeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodeActions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  position: absolute;
+  right: 8px;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 2px 4px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.nodeRow:hover .nodeActions {
+  display: flex;
+}
+
+.nodeActions button {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.nodeActions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.nodeActions .deleteBtn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.createInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.inlineForm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.inlineInput {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--accent-secondary);
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  outline: none;
+  font-family: inherit;
+}
+
+.subTree {
+  display: flex;
+  flex-direction: column;
+}
+
+.emptyExplorer {
+  padding: 40px 20px;
+  text-align: center;
+  color: #64748b;
+}
+
+.emptyExplorer p {
+  margin: 4px 0;
+  font-size: 0.8rem;
+}
+
+/* Search results styles */
+.searchResults {
+  padding: 0 16px;
+}
+
+.resultsLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.noResults {
+  color: #64748b;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.searchResultRow {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.searchResultRow:hover {
+  background: var(--accent-secondary-muted);
+  border-color: var(--accent-secondary-muted);
+}
+
+.searchResultHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.resultPath {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchSnippet {
+  display: flex;
+  gap: 6px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  background: rgba(10, 15, 30, 0.5);
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.snippetLine {
+  color: var(--accent-secondary);
+}
+
+.snippetText {
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile Responsive Overhaul - Sleek Vertical Menu Style */
+@media (max-width: 768px) {
+  .explorerHeader {
+    padding: 14px 16px;
+    background: rgba(15, 23, 42, 0.4);
+  }
+
+  .explorerTitle {
+    font-size: 0.7rem;
+    letter-spacing: 1.5px;
+  }
+
+  .headerButtons button {
+    padding: 6px 10px !important;
+    font-size: 0.78rem !important;
+    border-radius: 8px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .searchBar {
+    padding: 10px 16px;
+  }
+
+  .searchInput {
+    padding: 10px 10px 10px 36px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+  }
+
+  .filesSection {
+    padding: 6px;
+  }
+
+  .nodeRow {
+    height: 48px !important;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    padding-right: 12px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .nodeRow:hover, .nodeRow:active {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .nodeRowActive {
+    background: var(--accent-primary-muted) !important;
+    border-color: var(--accent-primary-hover) !important;
+    border-left: 3px solid var(--accent-primary) !important;
+  }
+
+  .nodeRowActive .nodeLabel {
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .nodeLabel {
+    font-size: 0.9rem !important;
+    gap: 12px !important;
+  }
+
+  .chevronBtn {
+    padding: 8px !important;
+    color: #94a3b8;
+  }
+
+  /* Make actions always visible and tap-friendly on mobile */
+  .nodeActions {
+    display: flex !important;
+    position: relative !important;
+    right: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    gap: 10px !important;
+    margin-left: 8px;
+    opacity: 0.9;
+  }
+
+  .nodeActions button {
+    padding: 6px !important;
+    border-radius: 6px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    color: #cbd5e1 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+  }
+
+  .nodeActions button:active {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .nodeActions .deleteBtn {
+    color: #f87171 !important;
+    border-color: rgba(239, 68, 68, 0.15) !important;
+    background: rgba(239, 68, 68, 0.04) !important;
+  }
+
+  .nodeActions .deleteBtn:active {
+    background: rgba(239, 68, 68, 0.15) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+  }
+
+  .inlineInput {
+    height: 32px !important;
+    font-size: 0.88rem !important;
+    border-radius: 6px !important;
+    border-color: var(--accent-primary) !important;
+    padding: 4px 8px !important;
+  }
+  
+  .createInputRow {
+    height: 48px !important;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-right: 12px;
+  }
+}

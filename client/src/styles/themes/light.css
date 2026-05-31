@@ -1,0 +1,71 @@
+/* ═══════════════════════════════════════════════════════
+   Light Theme — WebHoster Professional SaaS Design System
+   ═══════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ── Backgrounds ── */
+  --bg-primary: #FAFAFA;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F4F4F5;
+  --bg-card: rgba(255, 255, 255, 0.75);
+  --bg-input: #FFFFFF;
+  --bg-hover: rgba(0, 0, 0, 0.03);
+
+  /* ── Accent: Primary (Professional Blue — slightly deepened for light bg) ── */
+  --accent-primary: #0EA5C9;
+  --accent-primary-hover: #0891B2;
+  --accent-primary-muted: rgba(14, 165, 201, 0.12);
+
+  /* ── Accent: Secondary (Purple — slightly deepened for light bg) ── */
+  --accent-secondary: #7C3AED;
+  --accent-secondary-hover: #6D28D9;
+  --accent-secondary-muted: rgba(124, 58, 237, 0.1);
+
+  /* ── Gradient ── */
+  --accent-gradient: linear-gradient(135deg, #0EA5C9 0%, #7C3AED 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #0891B2 0%, #6D28D9 100%);
+
+  /* ── Status ── */
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error: #DC2626;
+  --status-info: #0EA5C9;
+
+  /* ── Text ── */
+  --text-primary: #18181B;
+  --text-secondary: #3F3F46;
+  --text-tertiary: #71717A;
+
+  /* ── Borders ── */
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.15);
+  --border-focus: var(--accent-primary);
+
+  /* ── Shadows (heavier for light context) ── */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+
+  /* ── Glass ── */
+  --glass-blur: blur(12px);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: 1px solid rgba(0, 0, 0, 0.08);
+
+  /* ── Animations (same as dark) ── */
+  --transition-fast: 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Border Radius (same as dark) ── */
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+
+  /* ── Scrollbar ── */
+  --scrollbar-track: var(--bg-primary);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: var(--accent-primary);
+}

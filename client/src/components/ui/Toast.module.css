@@ -1,0 +1,96 @@
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-xl);
+  padding: 0.85rem 1.2rem;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 420px;
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.message {
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.successIcon {
+  color: var(--status-success);
+}
+
+.errorIcon {
+  color: var(--status-error);
+}
+
+.infoIcon {
+  color: var(--accent-primary);
+}
+
+.loadingIcon {
+  color: var(--accent-secondary);
+  animation: spin 1s linear infinite;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+/* Toast Variants specific outlines */
+.success {
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.error {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.loading {
+  border-color: var(--accent-secondary-muted);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
