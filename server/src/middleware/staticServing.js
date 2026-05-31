@@ -12,7 +12,7 @@ async function serveDeployedSite(req, res, next) {
   const parts = req.path.split('/').filter(Boolean);
 
   if (parts.length < 2 || parts[0] !== 'p') {
-    return res.status(404).send('Invalid deployment path');
+    return res.status(404).type('txt').send('Invalid deployment path');
   }
 
   const deploymentId = parts[1];
@@ -128,7 +128,7 @@ async function serveDeployedSite(req, res, next) {
         copyRecursiveSync(liveDir, baseDeploymentDir);
       } else {
         if (!deployment.backupUrl) {
-          return res.status(404).send('Deployment files not found.');
+          return res.status(404).type('txt').send('Deployment files not found.');
         }
         try {
           await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
@@ -146,20 +146,20 @@ async function serveDeployedSite(req, res, next) {
           copyRecursiveSync(liveDir, baseDeploymentDir);
         } catch (err) {
           console.error(`[ERROR] Draft lazy restoration failed for ${deploymentId}:`, err);
-          return res.status(500).send('Error restoring files.');
+          return res.status(500).type('txt').send('Error restoring files.');
         }
       }
     } else {
       if (!deployment.backupUrl) {
         console.error(`[ERROR] Unable to restore deployment ${deploymentId}: backup URL is missing.`);
-        return res.status(404).send('Deployment files not found locally and no backup exists.');
+        return res.status(404).type('txt').send('Deployment files not found locally and no backup exists.');
       }
 
       try {
         await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
       } catch (restoreError) {
         console.error(`[ERROR] Lazy restoration failed for ${deploymentId}:`, restoreError);
-        return res.status(500).send('Error unzipping deployment files from persistent storage.');
+        return res.status(500).type('txt').send('Error unzipping deployment files from persistent storage.');
       }
     }
   }
@@ -207,13 +207,13 @@ async function serveDeployedSite(req, res, next) {
   console.log(`[DEBUG] fs.existsSync check: ${fs.existsSync(resolvedFileToServe)}`);
 
   if (!resolvedFileToServe.startsWith(resolvedBaseDeployment)) {
-    return res.status(403).send('Forbidden: Path outside sandbox boundary');
+    return res.status(403).type('txt').send('Forbidden: Path outside sandbox boundary');
   }
 
   if (!fs.existsSync(resolvedFileToServe) || !fs.statSync(resolvedFileToServe).isFile()) {
     console.log(`[DEBUG] File not found or not a file: "${resolvedFileToServe}"`);
-    // If the file is not found, we can return a friendly 404 for that asset
-    return res.status(404).send('Asset not found');
+    // If the file is not found, we can return a friendly 404 for that asset with plain text MIME type
+    return res.status(404).type('txt').send('Asset not found');
   }
 
   // Set sandboxing headers so that deployed user-code cannot hijack cookies/storage of the main panel.
