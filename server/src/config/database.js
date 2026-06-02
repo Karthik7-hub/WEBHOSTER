@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
 
-let isConnected = false;
+let cachedConnection = null;
 
 async function connectDB() {
-  if (isConnected) {
-    return;
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  if (cachedConnection) {
+    await cachedConnection;
+    return mongoose.connection;
   }
 
   const uri = process.env.MONGO_URI;
@@ -13,11 +18,16 @@ async function connectDB() {
   }
 
   try {
-    const db = await mongoose.connect(uri);
-    isConnected = db.connections[0].readyState === 1;
+    cachedConnection = mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+    });
+
+    await cachedConnection;
     console.log('MongoDB Connected successfully to cluster');
+    return mongoose.connection;
   } catch (error) {
     console.error('MongoDB database connection failure:', error);
+    cachedConnection = null;
     throw error;
   }
 }

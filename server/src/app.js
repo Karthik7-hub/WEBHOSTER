@@ -8,6 +8,7 @@ const fs = require('fs');
 const config = require('./config/config');
 const deploymentRoutes = require('./routes/deploymentRoutes');
 const { serveDeployedSite } = require('./middleware/staticServing');
+const connectDB = require('./config/database');
 
 const app = express();
 
@@ -64,6 +65,76 @@ app.use('/api/deploy', deployLimiter);
 // 5. Body Parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Database connection middleware for API and preview/deployment routes
+app.use(['/api', '/p'], async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error('Database connection middleware failed:', error);
+    if (req.path.startsWith('/api')) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection failed. Please try again later.',
+      });
+    } else {
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Service Unavailable - WebHoster</title>
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+          <style>
+            body {
+              background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+              color: #f8fafc;
+              font-family: 'Outfit', sans-serif;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              padding: 20px;
+              box-sizing: border-box;
+            }
+            .container {
+              background: rgba(30, 41, 59, 0.4);
+              backdrop-filter: blur(20px);
+              border: 1px solid rgba(255, 255, 255, 0.08);
+              border-radius: 24px;
+              padding: 40px;
+              max-width: 500px;
+              width: 100%;
+              box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+              text-align: center;
+            }
+            h1 {
+              font-weight: 600;
+              margin-top: 0;
+              color: #ef4444;
+            }
+            p {
+              color: #94a3b8;
+              line-height: 1.6;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Connection Offline</h1>
+            <p>We are temporarily unable to connect to our database. Our systems are working to restore service. Please try reloading this page in a few moments.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+  }
+});
 
 // 6. Static Serving for deployed sites
 app.get('/p/*', serveDeployedSite);
