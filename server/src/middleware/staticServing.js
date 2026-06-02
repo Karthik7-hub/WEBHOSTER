@@ -199,18 +199,34 @@ async function serveDeployedSite(req, res, next) {
   }
 
   // Double check that file actually exists and resides inside the deployment boundary
-  const resolvedFileToServe = path.resolve(fileToServe);
+  let resolvedFileToServe = path.resolve(fileToServe);
   const resolvedBaseDeployment = path.resolve(baseDeploymentDir);
 
   console.log(`[DEBUG] resolvedFileToServe: "${resolvedFileToServe}"`);
   console.log(`[DEBUG] resolvedBaseDeployment: "${resolvedBaseDeployment}"`);
-  console.log(`[DEBUG] fs.existsSync check: ${fs.existsSync(resolvedFileToServe)}`);
 
   if (!resolvedFileToServe.startsWith(resolvedBaseDeployment)) {
     return res.status(403).type('txt').send('Forbidden: Path outside sandbox boundary');
   }
 
-  if (!fs.existsSync(resolvedFileToServe) || !fs.statSync(resolvedFileToServe).isFile()) {
+  let fileExists = fs.existsSync(resolvedFileToServe) && fs.statSync(resolvedFileToServe).isFile();
+
+  // If the file does not exist, check if it's an SPA route (no file extension)
+  if (!fileExists) {
+    const hasExtension = path.extname(resolvedFileToServe) !== '';
+    if (!hasExtension) {
+      const indexFallback = path.join(baseDeploymentDir, deployment.indexFilePath);
+      const resolvedFallback = path.resolve(indexFallback);
+
+      if (resolvedFallback.startsWith(resolvedBaseDeployment) && fs.existsSync(resolvedFallback) && fs.statSync(resolvedFallback).isFile()) {
+        console.log(`[staticServing] SPA route fallback: serving ${deployment.indexFilePath} for missing route: ${req.path}`);
+        resolvedFileToServe = resolvedFallback;
+        fileExists = true;
+      }
+    }
+  }
+
+  if (!fileExists) {
     console.log(`[DEBUG] File not found or not a file: "${resolvedFileToServe}"`);
     // If the file is not found, we can return a friendly 404 for that asset with plain text MIME type
     return res.status(404).type('txt').send('Asset not found');
