@@ -1096,14 +1096,15 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
   }
 
   // Generate initial ZIP backup and upload to ImageKit
-  const { ZipArchive } = await import('archiver');
+  const archiver = require('archiver');
   const imageKitService = require('./imageKitService');
+  const DeploymentVersion = require('../models/DeploymentVersion');
   const tempZipPath = path.join(config.paths.deployments, `temp-${deploymentId}-${Date.now()}.zip`);
 
   const zipDirectory = (sourceDir, outPath) => {
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outPath);
-      const archive = new ZipArchive({ zlib: { level: 9 } });
+      const archive = archiver('zip', { zlib: { level: 9 } });
       output.on('close', resolve);
       archive.on('error', reject);
       archive.pipe(output);
@@ -1121,7 +1122,7 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     await zipDirectory(targetDir, tempZipPath);
 
     console.log(`[TEMPLATE BACKUP] Uploading initial template backup to ImageKit for "${deploymentId}"...`);
-    const uploadResult = await imageKitService.uploadBackup(tempZipPath, `${deploymentId}.zip`);
+    const uploadResult = await imageKitService.uploadBackup(tempZipPath, `${deploymentId}-v1.zip`);
     if (uploadResult && uploadResult.url) {
       imageKitBackup = uploadResult;
       console.log(`[TEMPLATE BACKUP] ImageKit initial backup upload success: ${imageKitBackup.url}`);
@@ -1143,6 +1144,14 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     indexFilePath: 'index.html',
     backupUrl: imageKitBackup.url,
     backupFileId: imageKitBackup.fileId
+  });
+
+  await DeploymentVersion.create({
+    deploymentId: deploymentId,
+    versionNumber: 1,
+    backupUrl: imageKitBackup.url,
+    backupFileId: imageKitBackup.fileId,
+    fileCount
   });
 
   return deployment.toObject();

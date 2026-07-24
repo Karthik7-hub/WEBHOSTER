@@ -395,11 +395,11 @@ async function publishDraftChanges(req, res, next) {
     const { nanoid } = require('nanoid');
     const tempZipPath = path.join(config.paths.temp, `publish-${id}-${nanoid(4)}.zip`);
 
-    const { ZipArchive } = await import('archiver');
+    const archiver = require('archiver');
     const zipDirectory = (sourceDir, outPath) => {
       return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(outPath);
-        const archive = new ZipArchive({ zlib: { level: 9 } });
+        const archive = archiver('zip', { zlib: { level: 9 } });
         output.on('close', resolve);
         archive.on('error', reject);
         archive.pipe(output);
@@ -414,11 +414,23 @@ async function publishDraftChanges(req, res, next) {
     console.log(`[PUBLISH] Zipping draft for "${id}"...`);
     await zipDirectory(draftDir, tempZipPath);
 
-    console.log(`[PUBLISH] Uploading ZIP to ImageKit for "${id}"...`);
+    const Deployment = require('../models/Deployment');
+    const DeploymentVersion = require('../models/DeploymentVersion');
+    const AuditLog = require('../models/AuditLog');
+
+    const deployment = await Deployment.findOne({ id });
+    if (!deployment) {
+      throw new Error('Deployment not found');
+    }
+
+    const versionsCount = await DeploymentVersion.countDocuments({ deploymentId: id });
+    const nextVersionNumber = versionsCount + 1;
+
+    console.log(`[PUBLISH] Uploading ZIP to ImageKit for "${id}" (version ${nextVersionNumber})...`);
     let imageKitBackup = { url: '', fileId: '' };
     try {
       const imageKitService = require('../services/imageKitService');
-      const uploadResult = await imageKitService.uploadBackup(tempZipPath, `${id}.zip`);
+      const uploadResult = await imageKitService.uploadBackup(tempZipPath, `${id}-v${nextVersionNumber}.zip`);
       if (uploadResult && uploadResult.url) {
         imageKitBackup = uploadResult;
         console.log(`[PUBLISH] ImageKit upload success: ${imageKitBackup.url}`);
@@ -448,18 +460,6 @@ async function publishDraftChanges(req, res, next) {
       }
     };
     copyRecursiveSync(draftDir, targetDir);
-
-    const Deployment = require('../models/Deployment');
-    const DeploymentVersion = require('../models/DeploymentVersion');
-    const AuditLog = require('../models/AuditLog');
-
-    const deployment = await Deployment.findOne({ id });
-    if (!deployment) {
-      throw new Error('Deployment not found');
-    }
-
-    const versionsCount = await DeploymentVersion.countDocuments({ deploymentId: id });
-    const nextVersionNumber = versionsCount + 1;
 
     const versionRecord = await DeploymentVersion.create({
       deploymentId: id,

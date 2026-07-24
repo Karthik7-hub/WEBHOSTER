@@ -35,6 +35,8 @@ async function uploadBackup(filePath, fileName) {
       fileName: fileName,
       folder: '/webhoster_backups',
       useUniqueFileName: false,
+      overwriteFile: true,
+      purgeCache: true,
     });
 
     return {

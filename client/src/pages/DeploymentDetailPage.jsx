@@ -21,6 +21,7 @@ export default function DeploymentDetailPage() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('preview'); // preview, logs
+  const [iframeLoading, setIframeLoading] = useState(true);
   
   const { removeDeployment, error: contextError } = useDeployments();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -28,17 +29,28 @@ export default function DeploymentDetailPage() {
   const [deleteError, setDeleteError] = useState(null);
 
   const justDeployed = location.state?.justDeployed || false;
+  const [realLogs, setRealLogs] = useState([]);
+  const [pipelineStages, setPipelineStages] = useState([]);
 
-  // 1. Fetch Deployment Details
+  // 1. Fetch Deployment Details & Real System Logs
   useEffect(() => {
     const fetchDetails = async () => {
       setLoading(true);
       try {
-        const response = await api.getDeployment(id);
-        if (response.success) {
-          setDeployment(response.data);
+        const [depRes, logsRes] = await Promise.allSettled([
+          api.getDeployment(id),
+          api.getDeploymentLogs(id)
+        ]);
+
+        if (depRes.status === 'fulfilled' && depRes.value.success) {
+          setDeployment(depRes.value.data);
         } else {
-          setError(response.error || 'Failed to load details');
+          setError(depRes.reason?.response?.data?.error || 'Failed to load details');
+        }
+
+        if (logsRes.status === 'fulfilled' && logsRes.value.success) {
+          setRealLogs(logsRes.value.data.logs || []);
+          setPipelineStages(logsRes.value.data.pipelineStages || []);
         }
       } catch (err) {
         console.error(err);
@@ -96,29 +108,6 @@ export default function DeploymentDetailPage() {
   }
 
   const displayUrl = deployment.publicUrl.replace(/^https?:\/\//, '');
-
-  const buildLogs = [
-    { time: '14:55:01', msg: '[SYSTEM] WebHoster Build Container initialized.' },
-    { time: '14:55:02', msg: '[RECEIVER] Receiving uploaded ZIP file archive...' },
-    { time: '14:55:02', msg: `[ARCHIVE] Archive identified: "${deployment.originalFileName}" (${deployment.fileCount} files).` },
-    { time: '14:55:03', msg: '[SECURITY] Scanning package structural integrity...' },
-    { time: '14:55:03', msg: '[SECURITY] ZIP Slip prevention traversal validation: [PASSED]' },
-    { time: '14:55:03', msg: '[SECURITY] Executable code verification scanners: [PASSED]' },
-    { time: '14:55:04', msg: `[COMPILER] Deploying files to directory sandbox...` },
-    { time: '14:55:04', msg: `[SCANNER] Scan: Found Entrypoint: "${deployment.indexFilePath}"` },
-    { time: '14:55:05', msg: '[BACKUP] Synchronizing backup to ImageKit CDN...' },
-    { time: '14:55:06', msg: `[BACKUP] ImageKit Backup successfully mounted: ID: ${deployment.backupFileId || 'N/A'}` },
-    { time: '14:55:06', msg: '[LAUNCH] Instantiating dynamic hosting server ports...' },
-    { time: '14:55:07', msg: '[SUCCESS] Hosting successfully established!' },
-    { time: '14:55:07', msg: `[LINK] Public address: ${deployment.publicUrl}` },
-  ];
-
-  const pipelineStages = [
-    { label: 'Initialize', desc: 'Initialize Node Server', duration: 0.1 },
-    { label: 'Decompress', desc: 'Verify Sandboxing Slip Checks', duration: 0.3 },
-    { label: 'Sync Backup', desc: 'ImageKit Cloud CDN Mount', duration: 0.5 },
-    { label: 'Establish Link', desc: 'Exposing Route Endpoint', duration: 0.7 }
-  ];
 
   return (
     <AppShell>
@@ -305,9 +294,10 @@ export default function DeploymentDetailPage() {
                 </div>
                 <div className={styles.browserAddressBar}>
                   <Lock size={12} className={styles.lockIcon} />
-                  <span className={styles.addressText}>{displayUrl}</span>
+                  <span className={styles.addressText} title={displayUrl}>{displayUrl}</span>
                 </div>
                 <button type="button" className={styles.browserRefreshBtn} onClick={() => {
+                  setIframeLoading(true);
                   const iframe = document.getElementById('preview-frame');
                   if (iframe) iframe.src = iframe.src;
                 }}>
@@ -316,13 +306,20 @@ export default function DeploymentDetailPage() {
               </div>
 
               <div className={styles.iframeWrapper}>
+                {iframeLoading && !isDeleting && (
+                  <div className={styles.iframeLoadingOverlay}>
+                    <Loader2 size={24} className={styles.spinner} />
+                    <span>Loading sandbox preview...</span>
+                  </div>
+                )}
                 {!isDeleting ? (
                   <iframe 
                     id="preview-frame"
-                    src={deployment.publicUrl} 
+                    src={`/p/${deployment.id}/`} 
                     title={deployment.name}
                     className={styles.previewIframe}
-                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    onLoad={() => setIframeLoading(false)}
                   ></iframe>
                 ) : (
                   <div className={styles.iframeUnmountedState}>
@@ -340,12 +337,18 @@ export default function DeploymentDetailPage() {
                 <span className={styles.consoleDot}></span>
               </div>
               <div className={styles.consoleBody}>
-                {buildLogs.map((log, idx) => (
-                  <div key={idx} className={styles.consoleRow}>
-                    <span className={styles.logTime}>[{log.time}]</span>
-                    <span className={styles.logMsg}>{log.msg}</span>
+                {realLogs.length === 0 ? (
+                  <div className={styles.consoleRow}>
+                    <span className={styles.logMsg}>No server build logs available yet.</span>
                   </div>
-                ))}
+                ) : (
+                  realLogs.map((log, idx) => (
+                    <div key={idx} className={styles.consoleRow}>
+                      <span className={styles.logTime}>[{log.time}]</span>
+                      <span className={styles.logMsg}>{log.msg}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

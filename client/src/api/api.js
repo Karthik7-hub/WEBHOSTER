@@ -118,6 +118,14 @@ export const getDeployment = async (id) => {
 };
 
 /**
+ * Returns build and audit logs for a specific deployment.
+ */
+export const getDeploymentLogs = async (id) => {
+  const response = await apiClient.get(`/deployments/${id}/logs`);
+  return response.data;
+};
+
+/**
  * Deletes a deployment from system.
  */
 export const deleteDeployment = async (id) => {

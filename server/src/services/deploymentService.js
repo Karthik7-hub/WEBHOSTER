@@ -27,20 +27,26 @@ function slugify(text) {
  */
 function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get(url, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`Failed to download: Status ${response.statusCode}`));
-        return;
-      }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close(resolve);
+    const request = (currentUrl) => {
+      https.get(currentUrl, (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          return request(response.headers.location);
+        }
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download: Status ${response.statusCode}`));
+          return;
+        }
+        const file = fs.createWriteStream(destPath);
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close(resolve);
+        });
+      }).on('error', (err) => {
+        fs.unlink(destPath, () => {});
+        reject(err);
       });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
+    };
+    request(url);
   });
 }
 
@@ -101,10 +107,10 @@ async function extractZip(zipPath, targetDir) {
  * Helper to zip a directory.
  */
 async function zipDirectory(sourceDir, outPath) {
-  const { ZipArchive } = await import('archiver');
+  const archiver = require('archiver');
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
-    const archive = new ZipArchive({
+    const archive = archiver('zip', {
       zlib: { level: 9 }
     });
 
@@ -160,7 +166,7 @@ async function createDeployment(zipPath, originalName) {
     // 2. Upload original ZIP backup to ImageKit
     try {
       console.log(`Uploading ZIP backup to ImageKit for deployment: ${deploymentId}...`);
-      imageKitBackup = await imageKitService.uploadBackup(zipPath, `${deploymentId}.zip`);
+      imageKitBackup = await imageKitService.uploadBackup(zipPath, `${deploymentId}-v1.zip`);
       console.log(`ImageKit backup succeeded: ${imageKitBackup.url}`);
     } catch (ikError) {
       console.error('ImageKit backup upload failed, proceeding without backup:', ikError);
@@ -175,6 +181,15 @@ async function createDeployment(zipPath, originalName) {
       indexFilePath: indexHtmlPath,
       backupUrl: imageKitBackup ? imageKitBackup.url : null,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
+    });
+
+    const DeploymentVersion = require('../models/DeploymentVersion');
+    await DeploymentVersion.create({
+      deploymentId: deploymentId,
+      versionNumber: 1,
+      backupUrl: imageKitBackup ? imageKitBackup.url : null,
+      backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
+      fileCount
     });
 
     return deployment.toObject();

@@ -67,6 +67,7 @@ router.post('/deployments/cleanup-stale', requireAdminAuth, controller.cleanupSt
 router.post('/deployments/trash/:id/restore', requireAdminAuth, controller.restoreTrash);
 router.delete('/deployments/trash/:id/delete-permanently', requireAdminAuth, controller.deleteTrashPermanently);
 router.get('/deployments/:id', requireAdminAuth, controller.getDeploymentById);
+router.get('/deployments/:id/logs', requireAdminAuth, controller.getDeploymentLogs);
 router.get('/deployments/:id/download', requireAdminAuth, controller.downloadDeploymentZIP);
 router.delete('/deployments/:id', requireAdminAuth, controller.deleteDeployment);
 
