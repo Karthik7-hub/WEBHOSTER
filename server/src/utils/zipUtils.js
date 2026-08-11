@@ -1,21 +1,27 @@
 const fs = require('fs');
-const archiver = require('archiver');
-const ZipArchive = archiver.ZipArchive || (archiver.default && archiver.default.ZipArchive);
 
 /**
- * Creates a ZipArchive instance using Archiver 8.0.0+ official API.
+ * Asynchronously loads archiver and creates a ZipArchive instance safely.
+ * Uses dynamic import('archiver') to support ES Module packages in Vercel serverless functions.
  * 
  * @param {Object} options - Archiver options object (e.g. { zlib: { level: 9 } })
- * @returns {Object} - ZipArchive stream instance
+ * @returns {Promise<Object>} - Resolves to ZipArchive stream instance
  */
-function createZipArchive(options = { zlib: { level: 9 } }) {
-  if (ZipArchive) {
-    return new ZipArchive(options);
+async function createZipArchive(options = { zlib: { level: 9 } }) {
+  const mod = await import('archiver');
+  const ZipArchive = mod.ZipArchive || 
+                     (mod.default && mod.default.ZipArchive) || 
+                     (typeof mod.default === 'function' ? mod.default : mod);
+
+  if (typeof ZipArchive === 'function') {
+    try {
+      return new ZipArchive(options);
+    } catch (e) {
+      return ZipArchive('zip', options);
+    }
   }
-  if (typeof archiver === 'function') {
-    return archiver('zip', options);
-  }
-  throw new Error('Could not initialize Archiver 8.0.0 ZipArchive engine.');
+
+  throw new Error('Could not initialize Archiver ZipArchive engine.');
 }
 
 /**
@@ -26,10 +32,11 @@ function createZipArchive(options = { zlib: { level: 9 } }) {
  * @param {string} outPath - Absolute path where the ZIP file should be written.
  * @returns {Promise<void>}
  */
-function zipDirectory(sourceDir, outPath) {
+async function zipDirectory(sourceDir, outPath) {
+  const archive = await createZipArchive({ zlib: { level: 9 } });
+
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
-    const archive = createZipArchive({ zlib: { level: 9 } });
 
     output.on('close', resolve);
     archive.on('error', reject);
@@ -52,10 +59,11 @@ function zipDirectory(sourceDir, outPath) {
  * @param {string} filename - Attachment filename for the HTTP response.
  * @returns {Promise<void>}
  */
-function streamZipToResponse(sourceDir, res, filename) {
+async function streamZipToResponse(sourceDir, res, filename) {
+  const archive = await createZipArchive({ zlib: { level: 9 } });
+
   return new Promise((resolve, reject) => {
     res.attachment(filename);
-    const archive = createZipArchive({ zlib: { level: 9 } });
 
     archive.on('error', (err) => {
       if (!res.headersSent) {
