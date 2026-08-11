@@ -12,6 +12,9 @@ const connectDB = require('./config/database');
 
 const app = express();
 
+// Trust proxy for Vercel/reverse proxy environments (required by express-rate-limit)
+app.set('trust proxy', 1);
+
 // 1. Enable requests logging in development mode
 if (config.env === 'development') {
   app.use(morgan('dev'));
@@ -62,9 +65,9 @@ const deployLimiter = rateLimit({
 app.use('/api/', globalLimiter);
 app.use('/api/deploy', deployLimiter);
 
-// 5. Body Parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 5. Body Parsing (50MB limit to support large code files and site templates)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Database connection middleware for API and preview/deployment routes
 app.use(['/api', '/p'], async (req, res, next) => {
@@ -300,6 +303,14 @@ app.use((err, req, res, next) => {
     return res.status(400).json({
       success: false,
       error: 'Upload Error: File size exceeds the 20MB limit.',
+    });
+  }
+
+  // Handle PayloadTooLargeError (HTTP 413)
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      success: false,
+      error: 'Payload Error: Request payload is too large.',
     });
   }
 
