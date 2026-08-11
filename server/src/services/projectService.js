@@ -1095,7 +1095,7 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     fileCount++;
   }
 
-  // Generate initial ZIP backup and upload to ImageKit
+  // Generate initial ZIP backup and upload to ImageKit CDN
   const archiverModule = await import('archiver');
   const archiver = archiverModule.default || archiverModule;
   const imageKitService = require('./imageKitService');
@@ -1122,14 +1122,14 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     console.log(`[TEMPLATE BACKUP] Zipping template files for "${deploymentId}"...`);
     await zipDirectory(targetDir, tempZipPath);
 
-    console.log(`[TEMPLATE BACKUP] Uploading initial template backup to ImageKit for "${deploymentId}"...`);
+    console.log(`[TEMPLATE BACKUP] Uploading initial template archive to ImageKit CDN for "${deploymentId}"...`);
     const uploadResult = await imageKitService.uploadBackup(tempZipPath, `${deploymentId}-v1.zip`);
     if (uploadResult && uploadResult.url) {
       imageKitBackup = uploadResult;
-      console.log(`[TEMPLATE BACKUP] ImageKit initial backup upload success: ${imageKitBackup.url}`);
+      console.log(`[TEMPLATE BACKUP] ImageKit upload success: ${imageKitBackup.url}`);
     }
   } catch (ikError) {
-    console.error(`[TEMPLATE BACKUP] ImageKit backup upload skipped or failed: ${ikError.message}. Proceeding with local release fallback.`);
+    console.warn(`[TEMPLATE BACKUP] ImageKit backup upload notice: ${ikError.message}. Using local dynamic endpoint fallback.`);
   } finally {
     if (fs.existsSync(tempZipPath)) {
       fs.unlinkSync(tempZipPath);
@@ -1137,23 +1137,24 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
   }
 
   const fallbackBackupUrl = `/api/deployments/${deploymentId}/download`;
+  const finalBackupUrl = imageKitBackup.url || fallbackBackupUrl;
 
-  // Write record to database with the backup URLs
+  // Write record to database with ImageKit CDN backup URL
   const deployment = await Deployment.create({
     id: deploymentId,
     name: cleanName,
     originalFileName: `template-${templateName}.zip`,
     fileCount,
     indexFilePath: 'index.html',
-    backupUrl: imageKitBackup.url || fallbackBackupUrl,
-    backupFileId: imageKitBackup.fileId
+    backupUrl: finalBackupUrl,
+    backupFileId: imageKitBackup.fileId || null
   });
 
   await DeploymentVersion.create({
     deploymentId: deploymentId,
     versionNumber: 1,
-    backupUrl: imageKitBackup.url || fallbackBackupUrl,
-    backupFileId: imageKitBackup.fileId,
+    backupUrl: finalBackupUrl,
+    backupFileId: imageKitBackup.fileId || null,
     fileCount
   });
 

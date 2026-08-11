@@ -14,7 +14,11 @@ function ensureSafePath(deploymentId, relativePath = '') {
   const baseDir = path.resolve(path.join(config.paths.deployments, '.drafts', deploymentId));
   const absolutePath = path.resolve(path.join(baseDir, relativePath));
   
-  if (!absolutePath.startsWith(baseDir)) {
+  // Case-insensitive boundary comparison for Windows drive letter / path casing safety
+  const normalizedBase = baseDir.toLowerCase();
+  const normalizedAbs = absolutePath.toLowerCase();
+  
+  if (!normalizedAbs.startsWith(normalizedBase)) {
     throw new Error('Security Exception: Access denied outside sandbox boundary.');
   }
   
@@ -96,7 +100,15 @@ function getFileContent(deploymentId, relativePath) {
   const { absolutePath } = ensureSafePath(deploymentId, relativePath);
 
   if (!fs.existsSync(absolutePath)) {
-    throw new Error(`File not found: ${relativePath}`);
+    // Check if the file exists in live targetDir and copy it over to draftDir
+    const livePath = path.join(config.paths.deployments, deploymentId, relativePath);
+    if (fs.existsSync(livePath) && fs.statSync(livePath).isFile()) {
+      const parentDir = path.dirname(absolutePath);
+      if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+      fs.copyFileSync(livePath, absolutePath);
+    } else {
+      throw new Error(`File not found: ${relativePath}`);
+    }
   }
 
   const stats = fs.statSync(absolutePath);

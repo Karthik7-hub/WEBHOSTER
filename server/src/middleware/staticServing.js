@@ -174,6 +174,12 @@ async function serveDeployedSite(req, res, next) {
   const prefix = `/p/${deploymentId}`;
   let subpath = req.path.substring(prefix.length) || '/';
   
+  try {
+    subpath = decodeURIComponent(subpath);
+  } catch (e) {
+    // If decoding fails, keep raw subpath
+  }
+  
   // Normalize subpath to prevent path traversal attempts
   subpath = path.normalize(subpath).replace(/^(\.\.(\/|\\|$))+/, '');
 
@@ -184,14 +190,14 @@ async function serveDeployedSite(req, res, next) {
 
   if (cleanSubpath === '/' || cleanSubpath === '' || cleanSubpath === '/index.html') {
     // Serve the registered main index.html file
-    fileToServe = path.join(baseDeploymentDir, deployment.indexFilePath);
+    fileToServe = path.join(baseDeploymentDir, deployment.indexFilePath || 'index.html');
   } else {
     // Try to find file directly under deployments/abc123/css/style.css
     const directPath = path.join(baseDeploymentDir, subpath);
     
     // If index.html is deep nested (e.g. indexFilePath is "portfolio/index.html"),
     // check if file is located relative to the parent of indexFilePath (deployments/abc123/portfolio/css/style.css)
-    const indexParentDir = path.dirname(deployment.indexFilePath);
+    const indexParentDir = path.dirname(deployment.indexFilePath || 'index.html');
     const nestedPath = path.join(baseDeploymentDir, indexParentDir, subpath);
 
     if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
@@ -215,11 +221,66 @@ async function serveDeployedSite(req, res, next) {
 
   let fileExists = fs.existsSync(resolvedFileToServe) && fs.statSync(resolvedFileToServe).isFile();
 
+  // If root/index request failed to find file, attempt recursive search or auto-generate fallback
+  if (!fileExists && (cleanSubpath === '/' || cleanSubpath === '' || cleanSubpath === '/index.html')) {
+    const rootIndex = path.join(baseDeploymentDir, 'index.html');
+    if (fs.existsSync(rootIndex) && fs.statSync(rootIndex).isFile()) {
+      resolvedFileToServe = path.resolve(rootIndex);
+      fileExists = true;
+    } else {
+      const findIndexRecursive = (dir) => {
+        if (!fs.existsSync(dir)) return null;
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+          if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+          const full = path.join(dir, item.name);
+          if (item.isDirectory()) {
+            const found = findIndexRecursive(full);
+            if (found) return found;
+          } else if (item.name.toLowerCase() === 'index.html') {
+            return full;
+          }
+        }
+        return null;
+      };
+
+      const foundIndex = findIndexRecursive(baseDeploymentDir);
+      if (foundIndex) {
+        resolvedFileToServe = path.resolve(foundIndex);
+        fileExists = true;
+      } else {
+        // Auto-create index.html so root site request always serves a functional page
+        fs.mkdirSync(baseDeploymentDir, { recursive: true });
+        const fallbackHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${deployment.name || deploymentId}</title>
+  <style>
+    body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: rgba(30,41,59,0.5); padding: 40px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${deployment.name || 'Hosted Project'}</h1>
+    <p>Project workspace initialized. Open the Cloud IDE to add static web files.</p>
+  </div>
+</body>
+</html>`;
+        fs.writeFileSync(rootIndex, fallbackHtml, 'utf8');
+        resolvedFileToServe = path.resolve(rootIndex);
+        fileExists = true;
+      }
+    }
+  }
+
   // If the file does not exist, check if it's an SPA route (no file extension)
   if (!fileExists) {
     const hasExtension = path.extname(resolvedFileToServe) !== '';
     if (!hasExtension) {
-      const indexFallback = path.join(baseDeploymentDir, deployment.indexFilePath);
+      const indexFallback = path.join(baseDeploymentDir, deployment.indexFilePath || 'index.html');
       const resolvedFallback = path.resolve(indexFallback);
 
       if (resolvedFallback.startsWith(resolvedBaseDeployment) && fs.existsSync(resolvedFallback) && fs.statSync(resolvedFallback).isFile()) {
