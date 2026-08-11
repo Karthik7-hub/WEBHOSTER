@@ -27,10 +27,14 @@ function slugify(text) {
  */
 function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
-    const request = (currentUrl) => {
-      https.get(currentUrl, (response) => {
+    const request = (currentUrl, redirectCount = 0) => {
+      if (redirectCount > 10) {
+        return reject(new Error('Failed to download: Too many redirects'));
+      }
+      const protocol = currentUrl.startsWith('http://') ? require('http') : https;
+      protocol.get(currentUrl, (response) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          return request(response.headers.location);
+          return request(response.headers.location, redirectCount + 1);
         }
         if (response.statusCode !== 200) {
           reject(new Error(`Failed to download: Status ${response.statusCode}`));
@@ -40,6 +44,10 @@ function downloadFile(url, destPath) {
         response.pipe(file);
         file.on('finish', () => {
           file.close(resolve);
+        });
+        file.on('error', (err) => {
+          fs.unlink(destPath, () => {});
+          reject(err);
         });
       }).on('error', (err) => {
         fs.unlink(destPath, () => {});
@@ -61,8 +69,29 @@ async function extractZip(zipPath, targetDir) {
   let fileCount = 0;
   let indexHtmlPath = null;
 
-  for (const entry of directory.files) {
-    const normalizedPath = entry.path.replace(/\\/g, '/');
+  // Filter out system files like __MACOSX
+  const validEntries = directory.files.filter(e => {
+    const p = e.path.replace(/\\/g, '/');
+    return !p.startsWith('__MACOSX/') && !p.includes('/__MACOSX/');
+  });
+
+  // Check if all files are inside a single root wrapper directory (e.g., "my-folder/index.html")
+  const fileEntries = validEntries.filter(e => e.type === 'File');
+  let rootPrefix = '';
+  if (fileEntries.length > 0) {
+    const firstPart = fileEntries[0].path.replace(/\\/g, '/').split('/')[0];
+    if (firstPart && fileEntries.every(e => e.path.replace(/\\/g, '/').startsWith(firstPart + '/'))) {
+      rootPrefix = firstPart + '/';
+    }
+  }
+
+  for (const entry of validEntries) {
+    let normalizedPath = entry.path.replace(/\\/g, '/');
+    if (rootPrefix && normalizedPath.startsWith(rootPrefix)) {
+      normalizedPath = normalizedPath.substring(rootPrefix.length);
+    }
+
+    if (!normalizedPath) continue;
 
     // ZIP Slip Prevention: Validate target boundary
     if (!zipSecurity.isValidPath(targetDir, normalizedPath)) {
@@ -100,7 +129,7 @@ async function extractZip(zipPath, targetDir) {
     }
   }
 
-  return { fileCount, indexHtmlPath };
+  return { fileCount, indexHtmlPath: indexHtmlPath || 'index.html' };
 }
 
 /**
@@ -151,6 +180,7 @@ async function createDeployment(zipPath, originalName) {
   }
 
   const targetDir = path.join(config.paths.deployments, deploymentId);
+  const draftDir = path.join(config.paths.deployments, '.drafts', deploymentId);
   let imageKitBackup = null;
   let extracted = false;
 
@@ -159,27 +189,43 @@ async function createDeployment(zipPath, originalName) {
     const { fileCount, indexHtmlPath } = await extractZip(zipPath, targetDir);
     extracted = true;
 
-    if (!indexHtmlPath) {
+    if (!indexHtmlPath || !fs.existsSync(path.join(targetDir, indexHtmlPath))) {
       throw new Error('Static Hosting Exception: No "index.html" was found in your ZIP archive.');
     }
 
-    // 2. Upload original ZIP backup to ImageKit
+    // 2. Clone live targetDir to draftDir immediately
+    fs.mkdirSync(draftDir, { recursive: true });
+    const copyRecursiveSync = (src, dest) => {
+      if (fs.statSync(src).isDirectory()) {
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        fs.readdirSync(src).forEach((childItemName) => {
+          copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+        });
+      } else {
+        fs.copyFileSync(src, dest);
+      }
+    };
+    copyRecursiveSync(targetDir, draftDir);
+
+    // 3. Upload original ZIP backup to ImageKit (if configured)
     try {
       console.log(`Uploading ZIP backup to ImageKit for deployment: ${deploymentId}...`);
       imageKitBackup = await imageKitService.uploadBackup(zipPath, `${deploymentId}-v1.zip`);
       console.log(`ImageKit backup succeeded: ${imageKitBackup.url}`);
     } catch (ikError) {
-      console.error('ImageKit backup upload failed, proceeding without backup:', ikError);
+      console.warn('ImageKit backup upload skipped or failed, using local dynamic download URL fallback:', ikError.message);
     }
 
-    // 3. Write metadata to MongoDB
+    const fallbackBackupUrl = `/api/deployments/${deploymentId}/download`;
+
+    // 4. Write metadata to MongoDB
     const deployment = await Deployment.create({
       id: deploymentId,
       name: path.basename(originalName, path.extname(originalName)),
       originalFileName: originalName,
       fileCount,
       indexFilePath: indexHtmlPath,
-      backupUrl: imageKitBackup ? imageKitBackup.url : null,
+      backupUrl: imageKitBackup ? imageKitBackup.url : fallbackBackupUrl,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
     });
 
@@ -187,7 +233,7 @@ async function createDeployment(zipPath, originalName) {
     await DeploymentVersion.create({
       deploymentId: deploymentId,
       versionNumber: 1,
-      backupUrl: imageKitBackup ? imageKitBackup.url : null,
+      backupUrl: imageKitBackup ? imageKitBackup.url : fallbackBackupUrl,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
       fileCount
     });
@@ -197,6 +243,9 @@ async function createDeployment(zipPath, originalName) {
     // Cleanup local files if extraction failed
     if (extracted && fs.existsSync(targetDir)) {
       fs.rmSync(targetDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(draftDir)) {
+      fs.rmSync(draftDir, { recursive: true, force: true });
     }
     throw error;
   } finally {
@@ -227,9 +276,10 @@ async function getDeployment(id) {
  * Restores extracted static files inside `/tmp` from the ImageKit ZIP backup.
  */
 async function restoreFromBackup(id, backupUrl) {
-  console.log(`Restoring deployment files from ImageKit for: ${id}...`);
+  console.log(`Restoring deployment files for: ${id}...`);
   const tempZipPath = path.join(config.paths.temp, `restore-${id}-${nanoid(4)}.zip`);
   const targetDir = path.join(config.paths.deployments, id);
+  const draftDir = path.join(config.paths.deployments, '.drafts', id);
 
   try {
     // Ensure temp dir exists
@@ -237,21 +287,36 @@ async function restoreFromBackup(id, backupUrl) {
       fs.mkdirSync(config.paths.temp, { recursive: true });
     }
 
-    // 1. Download ZIP from CDN
-    await downloadFile(backupUrl, tempZipPath);
+    if (backupUrl && (backupUrl.startsWith('http://') || backupUrl.startsWith('https://'))) {
+      // Download ZIP from CDN and extract
+      await downloadFile(backupUrl, tempZipPath);
+      await extractZip(tempZipPath, targetDir);
+    } else if (fs.existsSync(draftDir)) {
+      // Clone from draftDir if available
+      fs.mkdirSync(targetDir, { recursive: true });
+      const copyRecursiveSync = (src, dest) => {
+        if (fs.statSync(src).isDirectory()) {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          fs.readdirSync(src).forEach((childItemName) => {
+            copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+          });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
+      };
+      copyRecursiveSync(draftDir, targetDir);
+    } else {
+      console.log(`[RESTORE] Backup URL is local dynamic endpoint for ${id}. Workspace directory structure preserved.`);
+    }
 
-    // 2. Unzip safely
-    await extractZip(tempZipPath, targetDir);
     console.log(`Successfully restored static files locally for: ${id}`);
   } catch (error) {
     console.error(`Failed to restore static files for ${id}:`, error);
-    // Cleanup partial folder
     if (fs.existsSync(targetDir)) {
       fs.rmSync(targetDir, { recursive: true, force: true });
     }
     throw error;
   } finally {
-    // Cleanup downloaded ZIP
     if (fs.existsSync(tempZipPath)) {
       fs.unlinkSync(tempZipPath);
     }
@@ -400,10 +465,11 @@ async function redeployProject(id) {
       }
     }
 
-    // 4. Update deployment record
+    // 4. Update deployment record — preserve existing backupUrl if ImageKit failed
+    const fallbackBackupUrl = `/api/deployments/${id}/download`;
     deployment.fileCount = fileCount;
-    deployment.backupUrl = imageKitBackup.url;
-    deployment.backupFileId = imageKitBackup.fileId;
+    deployment.backupUrl = imageKitBackup.url || deployment.backupUrl || fallbackBackupUrl;
+    deployment.backupFileId = imageKitBackup.fileId || deployment.backupFileId || null;
     deployment.createdAt = new Date(); // Refresh deployed timestamp
     
     await deployment.save();

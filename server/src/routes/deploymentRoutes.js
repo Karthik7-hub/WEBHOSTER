@@ -68,7 +68,7 @@ router.post('/deployments/trash/:id/restore', requireAdminAuth, controller.resto
 router.delete('/deployments/trash/:id/delete-permanently', requireAdminAuth, controller.deleteTrashPermanently);
 router.get('/deployments/:id', requireAdminAuth, controller.getDeploymentById);
 router.get('/deployments/:id/logs', requireAdminAuth, controller.getDeploymentLogs);
-router.get('/deployments/:id/download', requireAdminAuth, controller.downloadDeploymentZIP);
+router.get('/deployments/:id/download', controller.downloadDeploymentZIP); // No auth: browser <a> tags cannot send Bearer headers
 router.delete('/deployments/:id', requireAdminAuth, controller.deleteDeployment);
 
 module.exports = router;

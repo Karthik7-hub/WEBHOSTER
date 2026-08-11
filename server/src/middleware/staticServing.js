@@ -132,18 +132,24 @@ async function serveDeployedSite(req, res, next) {
         }
         try {
           await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
-          fs.mkdirSync(baseDeploymentDir, { recursive: true });
-          const copyRecursiveSync = (src, dest) => {
-            if (fs.statSync(src).isDirectory()) {
-              if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-              fs.readdirSync(src).forEach((childItemName) => {
-                copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-              });
-            } else {
-              fs.copyFileSync(src, dest);
-            }
-          };
-          copyRecursiveSync(liveDir, baseDeploymentDir);
+          const liveDir = path.join(config.paths.deployments, deploymentId);
+          if (fs.existsSync(liveDir)) {
+            fs.mkdirSync(baseDeploymentDir, { recursive: true });
+            const copyRecursiveSync = (src, dest) => {
+              if (fs.statSync(src).isDirectory()) {
+                if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+                fs.readdirSync(src).forEach((childItemName) => {
+                  copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+                });
+              } else {
+                fs.copyFileSync(src, dest);
+              }
+            };
+            copyRecursiveSync(liveDir, baseDeploymentDir);
+          } else {
+            // backupUrl was a local fallback — no CDN to pull from, serve from liveDir if it exists
+            console.warn(`[staticServing] restoreFromBackup skipped for ${deploymentId} (local fallback URL). Attempting liveDir fallback.`);
+          }
         } catch (err) {
           console.error(`[ERROR] Draft lazy restoration failed for ${deploymentId}:`, err);
           return res.status(500).type('txt').send('Error restoring files.');
@@ -199,11 +205,9 @@ async function serveDeployedSite(req, res, next) {
   }
 
   // Double check that file actually exists and resides inside the deployment boundary
-  let resolvedFileToServe = path.resolve(fileToServe);
+  const resolvedFileToServeInitial = path.resolve(fileToServe);
   const resolvedBaseDeployment = path.resolve(baseDeploymentDir);
-
-  console.log(`[DEBUG] resolvedFileToServe: "${resolvedFileToServe}"`);
-  console.log(`[DEBUG] resolvedBaseDeployment: "${resolvedBaseDeployment}"`);
+  let resolvedFileToServe = resolvedFileToServeInitial;
 
   if (!resolvedFileToServe.startsWith(resolvedBaseDeployment)) {
     return res.status(403).type('txt').send('Forbidden: Path outside sandbox boundary');

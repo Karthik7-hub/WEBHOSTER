@@ -213,23 +213,26 @@ export default function DeploymentDetailPage() {
             </div>
           </div>
 
-          {deployment.backupUrl && (
-            <div className={styles.cdnAlert}>
-              <div className={styles.cdnInfo}>
-                <div className={styles.cdnIcon}>
-                  <Cloud size={18} />
-                </div>
-                <div>
-                  <p className={styles.cdnTitle}>Accelerated serving active</p>
-                  <p className={styles.cdnDesc}>Your original ZIP source is stored securely and accelerated globally via ImageKit CDN backup nodes.</p>
-                </div>
+          <div className={styles.cdnAlert}>
+            <div className={styles.cdnInfo}>
+              <div className={styles.cdnIcon}>
+                <Cloud size={18} />
               </div>
-              <a href={deployment.backupUrl} target="_blank" rel="noreferrer" className={styles.cdnDownloadBtn}>
-                <Download size={14} />
-                <span>Download Source ZIP</span>
-              </a>
+              <div>
+                <p className={styles.cdnTitle}>Accelerated serving active</p>
+                <p className={styles.cdnDesc}>Your project workspace and static resources are ready for instant serving and export.</p>
+              </div>
             </div>
-          )}
+            <a 
+              href={`/api/deployments/${deployment.id}/download`} 
+              target="_blank" 
+              rel="noreferrer" 
+              className={styles.cdnDownloadBtn}
+            >
+              <Download size={14} />
+              <span>Download Project ZIP</span>
+            </a>
+          </div>
         </div>
 
         {/* Danger Zone Card - Minimalist premium SaaS Style */}

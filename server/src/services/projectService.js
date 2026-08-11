@@ -1135,6 +1135,8 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     }
   }
 
+  const fallbackBackupUrl = `/api/deployments/${deploymentId}/download`;
+
   // Write record to database with the backup URLs
   const deployment = await Deployment.create({
     id: deploymentId,
@@ -1142,14 +1144,14 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     originalFileName: `template-${templateName}.zip`,
     fileCount,
     indexFilePath: 'index.html',
-    backupUrl: imageKitBackup.url,
+    backupUrl: imageKitBackup.url || fallbackBackupUrl,
     backupFileId: imageKitBackup.fileId
   });
 
   await DeploymentVersion.create({
     deploymentId: deploymentId,
     versionNumber: 1,
-    backupUrl: imageKitBackup.url,
+    backupUrl: imageKitBackup.url || fallbackBackupUrl,
     backupFileId: imageKitBackup.fileId,
     fileCount
   });

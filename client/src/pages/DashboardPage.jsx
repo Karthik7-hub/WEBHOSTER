@@ -29,7 +29,7 @@ export default function DashboardPage() {
     if (createQuery === 'template') {
       navigate('/?tab=templates');
     }
-  }, [createQuery]);
+  }, [createQuery, navigate]);
 
   const handleUploadSuccess = (deployment) => {
     navigate(`/deployment/${deployment.id}`, { state: { justDeployed: true } });

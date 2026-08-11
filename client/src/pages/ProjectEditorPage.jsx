@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { 
   ArrowLeft, Cloud, Check, Loader2, 
-  Laptop, Globe, FolderOpen, History, Undo2, AlertTriangle
+  Laptop, Globe, FolderOpen, History, Undo2, AlertTriangle, AlertCircle, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FileExplorer from '../components/editor/FileExplorer';
@@ -13,6 +13,18 @@ import Toast from '../components/ui/Toast';
 import * as api from '../api/api';
 import GlassConfirmModal from '../components/ui/GlassConfirmModal';
 import styles from './ProjectEditorPage.module.css';
+
+const findFileInTree = (nodes, predicate) => {
+  if (!nodes || !Array.isArray(nodes)) return null;
+  for (const node of nodes) {
+    if (node.type === 'file' && predicate(node)) return node;
+    if (node.type === 'directory' && node.children) {
+      const found = findFileInTree(node.children, predicate);
+      if (found) return found;
+    }
+  }
+  return null;
+};
 
 const getFileLanguage = (filePath) => {
   const parts = filePath.split('.');
@@ -71,7 +83,7 @@ export default function ProjectEditorPage() {
   const [toastMessage, setToastMessage] = useState(null);
   const [toastType, setToastType] = useState('info');
 
-  const prevActiveFileRef = useRef(null);
+
 
   const showToast = (message, type = 'info') => {
     setToastMessage(message);
@@ -109,12 +121,12 @@ export default function ProjectEditorPage() {
         if (filesRes.success) {
           setFiles(filesRes.data);
           
-          const hasIndex = filesRes.data.some(f => f.name.toLowerCase() === 'index.html' && f.type === 'file');
-          if (hasIndex) {
-            handleFileOpen('index.html');
-          } else if (filesRes.data.length > 0) {
-            const firstFile = filesRes.data.find(f => f.type === 'file');
-            if (firstFile) handleFileOpen(firstFile.path);
+          const indexNode = findFileInTree(filesRes.data, f => f.name.toLowerCase() === 'index.html');
+          if (indexNode) {
+            handleFileOpen(indexNode.path);
+          } else {
+            const firstFileNode = findFileInTree(filesRes.data, f => f.type === 'file');
+            if (firstFileNode) handleFileOpen(firstFileNode.path);
           }
         }
 
@@ -155,7 +167,6 @@ export default function ProjectEditorPage() {
 
   const handleFileOpen = async (filePath) => {
     if (activeFile === filePath) return;
-    prevActiveFileRef.current = activeFile;
     
     try {
       const res = await api.getFileContent(id, filePath);
@@ -355,12 +366,13 @@ export default function ProjectEditorPage() {
           setOpenTabs([]);
           setActiveFile(null);
           setEditorContent('');
-          
-          const hasIndex = filesRes.data.some(f => f.name.toLowerCase() === 'index.html' && f.type === 'file');
-          if (hasIndex) {
-            handleFileOpen('index.html');
-          } else if (filesRes.data.length > 0) {
-            const firstFile = filesRes.data.find(f => f.type === 'file');
+
+          // Use recursive search — works for flat and nested ZIP structures
+          const indexNode = findFileInTree(filesRes.data, f => f.name.toLowerCase() === 'index.html');
+          if (indexNode) {
+            handleFileOpen(indexNode.path);
+          } else {
+            const firstFile = findFileInTree(filesRes.data, f => f.type === 'file');
             if (firstFile) handleFileOpen(firstFile.path);
           }
         }
@@ -445,6 +457,17 @@ export default function ProjectEditorPage() {
             Explorer
           </button>
           
+          <a
+            href={`/api/deployments/${project.id}/download`}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.urlLink}
+            title="Export & download project files as a ZIP archive"
+          >
+            <Download size={13} style={{ color: '#38bdf8' }} />
+            <span>Export ZIP</span>
+          </a>
+
           <button 
             type="button" 
             className={styles.urlLink}

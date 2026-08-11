@@ -26,26 +26,34 @@ async function ensureLocalProjectDirectory(id) {
     await deploymentService.restoreFromBackup(id, deployment.backupUrl);
   }
 
-  // Ensure draftDir exists as a clone of targetDir if missing
+  // Ensure draftDir exists as a clone of targetDir if missing.
+  // Guard: targetDir might still not exist if backupUrl was a local fallback (no CDN to pull from).
   if (!fs.existsSync(draftDir)) {
-    console.log(`[IDE] Copying live files to drafts for "${id}"...`);
-    fs.mkdirSync(draftDir, { recursive: true });
-    
-    const copyRecursiveSync = (src, dest) => {
-      const exists = fs.existsSync(src);
-      const stats = exists && fs.statSync(src);
-      const isDirectory = exists && stats.isDirectory();
-      if (isDirectory) {
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-        fs.readdirSync(src).forEach((childItemName) => {
-          copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-        });
-      } else {
-        fs.copyFileSync(src, dest);
-      }
-    };
-    
-    copyRecursiveSync(targetDir, draftDir);
+    if (!fs.existsSync(targetDir)) {
+      // Nothing to clone — create both as empty dirs so the IDE doesn't crash
+      console.warn(`[IDE] No source files found for "${id}". Creating empty workspace.`);
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.mkdirSync(draftDir, { recursive: true });
+    } else {
+      console.log(`[IDE] Copying live files to drafts for "${id}"...`);
+      fs.mkdirSync(draftDir, { recursive: true });
+
+      const copyRecursiveSync = (src, dest) => {
+        const exists = fs.existsSync(src);
+        const stats = exists && fs.statSync(src);
+        const isDirectory = exists && stats.isDirectory();
+        if (isDirectory) {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          fs.readdirSync(src).forEach((childItemName) => {
+            copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+          });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
+      };
+
+      copyRecursiveSync(targetDir, draftDir);
+    }
   }
 }
 
@@ -461,17 +469,21 @@ async function publishDraftChanges(req, res, next) {
     };
     copyRecursiveSync(draftDir, targetDir);
 
+    const fallbackBackupUrl = `/api/deployments/${id}/download`;
+    const finalBackupUrl = imageKitBackup.url || deployment.backupUrl || fallbackBackupUrl;
+    const finalBackupFileId = imageKitBackup.fileId || deployment.backupFileId || null;
+
     const versionRecord = await DeploymentVersion.create({
       deploymentId: id,
       versionNumber: nextVersionNumber,
-      backupUrl: imageKitBackup.url,
-      backupFileId: imageKitBackup.fileId,
+      backupUrl: finalBackupUrl,
+      backupFileId: finalBackupFileId,
       fileCount
     });
 
     deployment.fileCount = fileCount;
-    deployment.backupUrl = imageKitBackup.url;
-    deployment.backupFileId = imageKitBackup.fileId;
+    deployment.backupUrl = finalBackupUrl;
+    deployment.backupFileId = finalBackupFileId;
     deployment.createdAt = new Date();
     await deployment.save();
 

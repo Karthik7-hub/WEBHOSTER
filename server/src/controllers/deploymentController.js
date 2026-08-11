@@ -247,7 +247,16 @@ async function downloadDeploymentZIP(req, res, next) {
     }
 
     const targetDir = path.join(config.paths.deployments, id);
-    if (!fs.existsSync(targetDir)) {
+    const draftDir = path.join(config.paths.deployments, '.drafts', id);
+
+    if (!fs.existsSync(targetDir) && !fs.existsSync(draftDir)) {
+      if (deployment.backupUrl && !deployment.backupUrl.includes(`/api/deployments/${id}/download`)) {
+        await deploymentService.restoreFromBackup(id, deployment.backupUrl);
+      }
+    }
+
+    const dirToPackage = fs.existsSync(draftDir) ? draftDir : targetDir;
+    if (!fs.existsSync(dirToPackage)) {
       return res.status(404).json({ success: false, error: 'Project files not found on disk.' });
     }
 
@@ -255,7 +264,7 @@ async function downloadDeploymentZIP(req, res, next) {
     const archiver = require('archiver');
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.pipe(res);
-    archive.directory(targetDir, false);
+    archive.directory(dirToPackage, false);
     await archive.finalize();
   } catch (error) {
     console.error('Error downloading deployment ZIP:', error);

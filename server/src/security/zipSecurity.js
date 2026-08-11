@@ -13,8 +13,11 @@ function isValidPath(targetDir, entryPath) {
   const resolvedTarget = path.resolve(targetDir);
   const resolvedFilePath = path.resolve(path.join(resolvedTarget, entryPath));
 
-  // Check that the file path starts with the target directory path
-  return resolvedFilePath.startsWith(resolvedTarget);
+  // Check that the file path starts with the target directory path.
+  // Must append path.sep to prevent prefix-bypass: e.g. resolvedTarget="/x/abc"
+  // matching resolvedFilePath="/x/abc-evil/payload" via a raw startsWith.
+  return resolvedFilePath === resolvedTarget ||
+    resolvedFilePath.startsWith(resolvedTarget + path.sep);
 }
 
 /**
