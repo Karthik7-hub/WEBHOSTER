@@ -5,6 +5,7 @@ const projectService = require('../services/projectService');
 const fileService = require('../services/fileService');
 const indexingService = require('../services/indexingService');
 const deploymentService = require('../services/deploymentService');
+const { zipDirectory } = require('../utils/zipUtils');
 
 /**
  * Ensures that the local directory for a project exists on disk.
@@ -402,23 +403,6 @@ async function publishDraftChanges(req, res, next) {
     }
     const { nanoid } = require('nanoid');
     const tempZipPath = path.join(config.paths.temp, `publish-${id}-${nanoid(4)}.zip`);
-
-    const archiverModule = await import('archiver');
-    const archiver = archiverModule.default || archiverModule;
-    const zipDirectory = (sourceDir, outPath) => {
-      return new Promise((resolve, reject) => {
-        const output = fs.createWriteStream(outPath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        output.on('close', resolve);
-        archive.on('error', reject);
-        archive.pipe(output);
-        archive.glob('**/*', {
-          cwd: sourceDir,
-          ignore: ['**/node_modules/**', '**/.*/**']
-        });
-        archive.finalize();
-      });
-    };
 
     console.log(`[PUBLISH] Zipping draft for "${id}"...`);
     await zipDirectory(draftDir, tempZipPath);

@@ -8,6 +8,7 @@ const zipSecurity = require('../security/zipSecurity');
 const imageKitService = require('./imageKitService');
 const connectDB = require('../config/database');
 const Deployment = require('../models/Deployment');
+const { zipDirectory } = require('../utils/zipUtils');
 
 // Helper to generate a clean web-friendly slug from zip filename
 function slugify(text) {
@@ -130,38 +131,6 @@ async function extractZip(zipPath, targetDir) {
   }
 
   return { fileCount, indexHtmlPath: indexHtmlPath || 'index.html' };
-}
-
-/**
- * Helper to zip a directory.
- */
-async function zipDirectory(sourceDir, outPath) {
-  const archiverModule = await import('archiver');
-  const archiver = archiverModule.default || archiverModule;
-  return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(outPath);
-    const archive = archiver('zip', {
-      zlib: { level: 9 }
-    });
-
-    output.on('close', () => {
-      resolve();
-    });
-
-    archive.on('error', (err) => {
-      reject(err);
-    });
-
-    archive.pipe(output);
-    
-    // Append files from source directory, but exclude node_modules or system files
-    archive.glob('**/*', {
-      cwd: sourceDir,
-      ignore: ['**/node_modules/**', '**/.*/**']
-    });
-
-    archive.finalize();
-  });
 }
 
 /**

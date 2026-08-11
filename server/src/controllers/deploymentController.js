@@ -3,6 +3,7 @@ const config = require('../config/config');
 const Deployment = require('../models/Deployment');
 const fs = require('fs');
 const path = require('path');
+const { streamZipToResponse } = require('../utils/zipUtils');
 
 /**
  * Handles ZIP file upload and triggers deployment service extraction.
@@ -260,13 +261,7 @@ async function downloadDeploymentZIP(req, res, next) {
       return res.status(404).json({ success: false, error: 'Project files not found on disk.' });
     }
 
-    res.attachment(`${deployment.name || id}.zip`);
-    const archiverModule = await import('archiver');
-    const archiver = archiverModule.default || archiverModule;
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.pipe(res);
-    archive.directory(dirToPackage, false);
-    await archive.finalize();
+    await streamZipToResponse(dirToPackage, res, `${deployment.name || id}.zip`);
   } catch (error) {
     console.error('Error downloading deployment ZIP:', error);
     if (!res.headersSent) {

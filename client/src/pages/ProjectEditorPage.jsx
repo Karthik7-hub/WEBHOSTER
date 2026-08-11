@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { 
@@ -213,6 +213,42 @@ export default function ProjectEditorPage() {
       setUnsavedChanges(prev => ({ ...prev, [activeFile]: true }));
     }
   };
+
+  // Immediate Save Active File (triggered by Ctrl+S or manual save)
+  const saveActiveFileNow = async (fileToSave = activeFile, contentToSave = editorContent) => {
+    if (!fileToSave) return;
+    setSaveStatus('Saving draft...');
+    try {
+      const res = await api.saveFileContent(id, fileToSave, contentToSave);
+      if (res.success) {
+        setUnsavedChanges(prev => ({ ...prev, [fileToSave]: false }));
+        setSaveStatus('Draft saved');
+        setHasUnpublishedChanges(true);
+        showToast(`Saved "${fileToSave}" to draft workspace`, 'success');
+      }
+    } catch (err) {
+      console.error('Save failed:', err);
+      setSaveStatus('Failed to save draft');
+      showToast(err.response?.data?.error || 'Failed to save file draft', 'error');
+    }
+  };
+
+  const saveRef = useRef();
+  saveRef.current = () => saveActiveFileNow(activeFile, editorContent);
+
+  // Global Ctrl+S / Cmd+S Keyboard Shortcut Listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (saveRef.current) {
+          saveRef.current();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Debounced Auto-Save to Draft Workspace
   useEffect(() => {
@@ -632,6 +668,13 @@ export default function ProjectEditorPage() {
                 theme="vs-dark"
                 value={editorContent}
                 onChange={handleEditorChange}
+                onMount={(editor, monaco) => {
+                  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+                    if (saveRef.current) {
+                      saveRef.current();
+                    }
+                  });
+                }}
                 options={{
                   fontSize: 13,
                   fontFamily: "'Fira Code', 'Courier New', Courier, monospace",

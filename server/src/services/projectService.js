@@ -4,6 +4,10 @@ const { nanoid } = require('nanoid');
 const config = require('../config/config');
 const connectDB = require('../config/database');
 const Deployment = require('../models/Deployment');
+const DeploymentVersion = require('../models/DeploymentVersion');
+const imageKitService = require('./imageKitService');
+const { getTemplateFiles } = require('../templates');
+const { zipDirectory } = require('../utils/zipUtils');
 
 // Helper to generate a clean web-friendly slug
 function slugify(text) {
@@ -17,7 +21,6 @@ function slugify(text) {
     .replace(/^-+/, '')
     .replace(/-+$/, '');
 }
-const { getTemplateFiles } = require('../templates');
 
 /**
  * Creates a new project from a template.
@@ -66,26 +69,7 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
   }
 
   // Generate initial ZIP backup and upload to ImageKit CDN
-  const archiverModule = await import('archiver');
-  const archiver = archiverModule.default || archiverModule;
-  const imageKitService = require('./imageKitService');
-  const DeploymentVersion = require('../models/DeploymentVersion');
   const tempZipPath = path.join(config.paths.deployments, `temp-${deploymentId}-${Date.now()}.zip`);
-
-  const zipDirectory = (sourceDir, outPath) => {
-    return new Promise((resolve, reject) => {
-      const output = fs.createWriteStream(outPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      output.on('close', resolve);
-      archive.on('error', reject);
-      archive.pipe(output);
-      archive.glob('**/*', {
-        cwd: sourceDir,
-        ignore: ['**/node_modules/**', '**/.*/**']
-      });
-      archive.finalize();
-    });
-  };
 
   let imageKitBackup = { url: null, fileId: null };
   try {
