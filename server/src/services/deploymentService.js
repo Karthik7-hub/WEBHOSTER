@@ -136,7 +136,8 @@ async function extractZip(zipPath, targetDir) {
  * Helper to zip a directory.
  */
 async function zipDirectory(sourceDir, outPath) {
-  const archiver = require('archiver');
+  const archiverModule = await import('archiver');
+  const archiver = archiverModule.default || archiverModule;
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
     const archive = archiver('zip', {
@@ -307,6 +308,54 @@ async function restoreFromBackup(id, backupUrl) {
       copyRecursiveSync(draftDir, targetDir);
     } else {
       console.log(`[RESTORE] Backup URL is local dynamic endpoint for ${id}. Workspace directory structure preserved.`);
+    }
+
+    // Fallback: If targetDir still doesn't exist or is empty after restore attempt (e.g. Vercel cold-start & local fallback URL)
+    if (!fs.existsSync(targetDir) || fs.readdirSync(targetDir).length === 0) {
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.mkdirSync(draftDir, { recursive: true });
+      
+      const deployment = await Deployment.findOne({ id }).lean();
+      let templateName = 'vanilla';
+      if (deployment && deployment.originalFileName && deployment.originalFileName.startsWith('template-')) {
+        templateName = deployment.originalFileName.replace('template-', '').replace('.zip', '');
+      }
+
+      const projectService = require('./projectService');
+      const files = projectService.getTemplateFiles ? projectService.getTemplateFiles(templateName, deployment?.name || id) : null;
+
+      if (files) {
+        for (const [relativePath, content] of Object.entries(files)) {
+          const fullPath = path.join(targetDir, relativePath);
+          const parent = path.dirname(fullPath);
+          if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
+          fs.writeFileSync(fullPath, content, 'utf8');
+
+          const draftPath = path.join(draftDir, relativePath);
+          const draftParent = path.dirname(draftPath);
+          if (!fs.existsSync(draftParent)) fs.mkdirSync(draftParent, { recursive: true });
+          fs.writeFileSync(draftPath, content, 'utf8');
+        }
+      } else {
+        const defaultHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${deployment?.name || id}</title>
+  <style>
+    body { background: #0f172a; color: #f8fafc; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+  </style>
+</head>
+<body>
+  <div style="text-align: center;">
+    <h1>${deployment?.name || 'Project Workspace'}</h1>
+    <p>Project workspace initialized.</p>
+  </div>
+</body>
+</html>`;
+        fs.writeFileSync(path.join(targetDir, 'index.html'), defaultHtml, 'utf8');
+        fs.writeFileSync(path.join(draftDir, 'index.html'), defaultHtml, 'utf8');
+      }
     }
 
     console.log(`Successfully restored static files locally for: ${id}`);

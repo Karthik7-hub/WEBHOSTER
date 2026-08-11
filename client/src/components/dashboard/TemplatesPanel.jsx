@@ -183,7 +183,7 @@ export default function TemplatesPanel() {
                 variant="primary"
                 loading={loading}
               >
-                Bootstrap Now
+                Create & Launch Project
               </Button>
             </div>
           </form>

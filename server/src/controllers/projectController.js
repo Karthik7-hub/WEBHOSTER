@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config/config');
-const projectService = require('../services/projectService');
+const projectService = require('../services/projectService').default;
 const fileService = require('../services/fileService');
 const indexingService = require('../services/indexingService');
 const deploymentService = require('../services/deploymentService');
@@ -13,7 +13,7 @@ const deploymentService = require('../services/deploymentService');
 async function ensureLocalProjectDirectory(id) {
   const targetDir = path.join(config.paths.deployments, id);
   const draftDir = path.join(config.paths.deployments, '.drafts', id);
-  
+
   if (!fs.existsSync(targetDir)) {
     console.log(`[IDE] Local workspace directory for "${id}" does not exist. Attempting lazy restore...`);
     const deployment = await deploymentService.getDeployment(id);
@@ -64,7 +64,7 @@ async function ensureLocalProjectDirectory(id) {
 async function createProject(req, res, next) {
   try {
     const { name, template } = req.body;
-    
+
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -73,7 +73,7 @@ async function createProject(req, res, next) {
     }
 
     const project = await projectService.createProjectFromTemplate(name, template || 'vanilla');
-    
+
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     return res.status(201).json({
       success: true,
@@ -108,8 +108,8 @@ async function getFiles(req, res, next) {
   } catch (error) {
     console.error('Error fetching file tree:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 500
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 500
     ).json({
       success: false,
       error: error.message || 'Failed to fetch project files.'
@@ -141,8 +141,8 @@ async function getFileContent(req, res, next) {
   } catch (error) {
     console.error('Error reading file content:', error);
     return res.status(
-      error.message.includes('not found') || 
-      error.message.includes('not exist') ? 404 : 500
+      error.message.includes('not found') ||
+        error.message.includes('not exist') ? 404 : 500
     ).json({
       success: false,
       error: error.message || 'Failed to read file content.'
@@ -175,8 +175,8 @@ async function saveFile(req, res, next) {
   } catch (error) {
     console.error('Error saving file:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 500
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 500
     ).json({
       success: false,
       error: error.message || 'Failed to save file content.'
@@ -209,8 +209,8 @@ async function createFileOrFolder(req, res, next) {
   } catch (error) {
     console.error('Error creating resource:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 400
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 400
     ).json({
       success: false,
       error: error.message || 'Failed to create resource.'
@@ -243,8 +243,8 @@ async function deleteFileOrFolder(req, res, next) {
   } catch (error) {
     console.error('Error deleting resource:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 400
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 400
     ).json({
       success: false,
       error: error.message || 'Failed to delete resource.'
@@ -277,8 +277,8 @@ async function renameFileOrFolder(req, res, next) {
   } catch (error) {
     console.error('Error renaming resource:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 400
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 400
     ).json({
       success: false,
       error: error.message || 'Failed to rename resource.'
@@ -300,8 +300,8 @@ async function searchFiles(req, res, next) {
   } catch (error) {
     console.error('Error searching files:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 500
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 500
     ).json({
       success: false,
       error: 'Lexical search index query failed.'
@@ -312,11 +312,11 @@ async function searchFiles(req, res, next) {
 async function deployProject(req, res, next) {
   try {
     const { id } = req.params;
-    
+
     await ensureLocalProjectDirectory(id);
     console.log(`IDE Direct Redeployment triggered for project: ${id}...`);
     const project = await deploymentService.redeployProject(id);
-    
+
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const publicUrl = `${baseUrl}/p/${project.id}/`;
 
@@ -331,8 +331,8 @@ async function deployProject(req, res, next) {
   } catch (error) {
     console.error('Error redeploying project from IDE:', error);
     return res.status(
-      error.message.includes('not exist') || 
-      error.message.includes('not found') ? 404 : 500
+      error.message.includes('not exist') ||
+        error.message.includes('not found') ? 404 : 500
     ).json({
       success: false,
       error: error.message || 'Redeployment build failed.'
@@ -369,14 +369,14 @@ async function publishDraftChanges(req, res, next) {
 
     let fileCount = 0;
     let hasIndex = false;
-    
+
     function scan(dir) {
       const items = fs.readdirSync(dir, { withFileTypes: true });
       for (const item of items) {
         if (item.name.startsWith('.') || item.name === 'node_modules') {
           continue;
         }
-        
+
         const fullPath = path.join(dir, item.name);
         if (item.isDirectory()) {
           scan(fullPath);
@@ -403,7 +403,8 @@ async function publishDraftChanges(req, res, next) {
     const { nanoid } = require('nanoid');
     const tempZipPath = path.join(config.paths.temp, `publish-${id}-${nanoid(4)}.zip`);
 
-    const archiver = require('archiver');
+    const archiverModule = await import('archiver');
+    const archiver = archiverModule.default || archiverModule;
     const zipDirectory = (sourceDir, outPath) => {
       return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(outPath);
@@ -521,7 +522,7 @@ async function getVersionHistory(req, res, next) {
   try {
     const { id } = req.params;
     const DeploymentVersion = require('../models/DeploymentVersion');
-    
+
     const versions = await DeploymentVersion.find({ deploymentId: id })
       .sort({ versionNumber: -1 })
       .lean();

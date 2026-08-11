@@ -261,7 +261,8 @@ async function downloadDeploymentZIP(req, res, next) {
     }
 
     res.attachment(`${deployment.name || id}.zip`);
-    const archiver = require('archiver');
+    const archiverModule = await import('archiver');
+    const archiver = archiverModule.default || archiverModule;
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.pipe(res);
     archive.directory(dirToPackage, false);
