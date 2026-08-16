@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config/config');
-const projectService = require('../services/projectService');
+const projectService = require('../services/projectService').default;
 const fileService = require('../services/fileService');
 const indexingService = require('../services/indexingService');
 const deploymentService = require('../services/deploymentService');
@@ -15,45 +15,69 @@ async function ensureLocalProjectDirectory(id) {
   const targetDir = path.join(config.paths.deployments, id);
   const draftDir = path.join(config.paths.deployments, '.drafts', id);
 
-  if (!fs.existsSync(targetDir)) {
-    console.log(`[IDE] Local workspace directory for "${id}" does not exist. Attempting lazy restore...`);
-    const deployment = await deploymentService.getDeployment(id);
-    if (!deployment) {
-      throw new Error(`Project "${id}" does not exist.`);
-    }
-    if (!deployment.backupUrl) {
-      throw new Error(`Project "${id}" does not exist locally and has no backup archives to restore.`);
-    }
-    await deploymentService.restoreFromBackup(id, deployment.backupUrl);
+  const deployment = await deploymentService.getDeployment(id);
+  if (!deployment) {
+    throw new Error(`Project "${id}" does not exist.`);
   }
 
-  // Ensure draftDir exists as a clone of targetDir if missing.
-  // Guard: targetDir might still not exist if backupUrl was a local fallback (no CDN to pull from).
-  if (!fs.existsSync(draftDir)) {
-    if (!fs.existsSync(targetDir)) {
-      // Nothing to clone — create both as empty dirs so the IDE doesn't crash
-      console.warn(`[IDE] No source files found for "${id}". Creating empty workspace.`);
-      fs.mkdirSync(targetDir, { recursive: true });
-      fs.mkdirSync(draftDir, { recursive: true });
-    } else {
-      console.log(`[IDE] Copying live files to drafts for "${id}"...`);
-      fs.mkdirSync(draftDir, { recursive: true });
+  // 1. Ensure targetDir is present and matches current deployment backup
+  const versionFilePath = path.join(targetDir, '.deploy_version');
+  const targetNeedsRestore = !fs.existsSync(targetDir) ||
+    (deployment.backupUrl && deployment.backupUrl.startsWith('http') && (!fs.existsSync(versionFilePath) || fs.readFileSync(versionFilePath, 'utf8').trim() !== (deployment.backupUrl || '')));
 
-      const copyRecursiveSync = (src, dest) => {
-        const exists = fs.existsSync(src);
-        const stats = exists && fs.statSync(src);
-        const isDirectory = exists && stats.isDirectory();
-        if (isDirectory) {
-          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-          fs.readdirSync(src).forEach((childItemName) => {
-            copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-          });
-        } else {
-          fs.copyFileSync(src, dest);
+  if (targetNeedsRestore && deployment.backupUrl) {
+    console.log(`[IDE] Local workspace directory for "${id}" is missing or outdated. Restoring from backup...`);
+    try {
+      await deploymentService.restoreFromBackup(id, deployment.backupUrl);
+      if (fs.existsSync(targetDir)) {
+        fs.writeFileSync(versionFilePath, deployment.backupUrl, 'utf8');
+      }
+    } catch (err) {
+      console.warn(`[IDE] Lazy restore for "${id}" notice:`, err.message);
+    }
+  }
+
+  // 2. Ensure draftDir is present and synced with MongoDB DraftFile / targetDir
+  if (!fs.existsSync(draftDir) || fs.readdirSync(draftDir).length === 0) {
+    fs.mkdirSync(draftDir, { recursive: true });
+
+    // Check if there are saved drafts in MongoDB DraftFile
+    const DraftFile = require('../models/DraftFile');
+    const draftFiles = await DraftFile.find({ deploymentId: id }).lean();
+
+    if (draftFiles.length > 0) {
+      console.log(`[IDE] Restoring ${draftFiles.length} draft files from MongoDB for "${id}"...`);
+      for (const df of draftFiles) {
+        const fullPath = path.join(draftDir, df.filePath);
+        const parent = path.dirname(fullPath);
+        if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
+        fs.writeFileSync(fullPath, df.content || '', 'utf8');
+      }
+    } else if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).filter(f => !f.startsWith('.')).length > 0) {
+      console.log(`[IDE] Copying live files to drafts for "${id}"...`);
+      fs.cpSync(targetDir, draftDir, { recursive: true, force: true });
+
+      // Seed MongoDB DraftFile from targetDir
+      const scanAndSeed = (dir, relDir = '') => {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+          if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+          const full = path.join(dir, item.name);
+          const rel = path.join(relDir, item.name).replace(/\\/g, '/');
+          if (item.isDirectory()) {
+            scanAndSeed(full, rel);
+          } else {
+            const isBin = fileService.isBinaryFile ? fileService.isBinaryFile(full) : false;
+            const content = !isBin ? fs.readFileSync(full, 'utf8') : '';
+            DraftFile.findOneAndUpdate(
+              { deploymentId: id, filePath: rel },
+              { content, isBinary: isBin, updatedAt: new Date() },
+              { upsert: true }
+            ).catch(() => { });
+          }
         }
       };
-
-      copyRecursiveSync(targetDir, draftDir);
+      scanAndSeed(targetDir);
     }
   }
 }
@@ -436,27 +460,29 @@ async function publishDraftChanges(req, res, next) {
       fs.unlinkSync(tempZipPath);
     }
 
-    console.log(`[PUBLISH] Overwriting live folder for "${id}"...`);
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-    }
-    fs.mkdirSync(targetDir, { recursive: true });
-
-    const copyRecursiveSync = (src, dest) => {
-      if (fs.statSync(src).isDirectory()) {
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-        fs.readdirSync(src).forEach((childItemName) => {
-          copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-        });
-      } else {
-        fs.copyFileSync(src, dest);
-      }
-    };
-    copyRecursiveSync(draftDir, targetDir);
+    console.log(`[PUBLISH] Staging live folder for "${id}"...`);
+    const stagingDir = path.join(config.paths.temp, `staging-publish-${id}-${nanoid(4)}`);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.cpSync(draftDir, stagingDir, { recursive: true, force: true });
 
     const fallbackBackupUrl = `/api/deployments/${id}/download`;
     const finalBackupUrl = imageKitBackup.url || deployment.backupUrl || fallbackBackupUrl;
-    const finalBackupFileId = imageKitBackup.fileId || deployment.backupFileId || null;
+    const versionMetadata = {
+      deploymentId: id,
+      versionNumber: nextVersionNumber,
+      backupUrl: finalBackupUrl,
+      backupFileId: finalBackupFileId,
+      fileCount,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Write structured JSON .deploy_version tag into stagingDir before swapping
+    const versionFilePath = path.join(stagingDir, '.deploy_version');
+    fs.writeFileSync(versionFilePath, JSON.stringify(versionMetadata, null, 2), 'utf8');
+
+    // Atomically swap stagingDir to targetDir to prevent serving partial/blank 404 states
+    const { atomicReplaceDirectory } = require('../utils/atomicFs');
+    atomicReplaceDirectory(stagingDir, targetDir);
 
     const versionRecord = await DeploymentVersion.create({
       deploymentId: id,
@@ -467,6 +493,9 @@ async function publishDraftChanges(req, res, next) {
     });
 
     deployment.fileCount = fileCount;
+    deployment.versionNumber = nextVersionNumber;
+    deployment.status = 'ready';
+    deployment.indexFilePath = 'index.html';
     deployment.backupUrl = finalBackupUrl;
     deployment.backupFileId = finalBackupFileId;
     deployment.createdAt = new Date();
@@ -495,6 +524,10 @@ async function publishDraftChanges(req, res, next) {
     });
   } catch (error) {
     console.error('[PUBLISH] Error in publishDraftChanges controller:', error);
+    try {
+      const Deployment = require('../models/Deployment');
+      await Deployment.updateOne({ id: req.params.id }, { status: 'ready' });
+    } catch (e) {}
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to publish draft changes.'
@@ -558,17 +591,27 @@ async function rollbackToVersion(req, res, next) {
     await deploymentService.restoreFromBackup(id, versionRecord.backupUrl);
 
     fs.mkdirSync(draftDir, { recursive: true });
-    const copyRecursiveSync = (src, dest) => {
-      if (fs.statSync(src).isDirectory()) {
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-        fs.readdirSync(src).forEach((childItemName) => {
-          copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-        });
-      } else {
-        fs.copyFileSync(src, dest);
+    fs.cpSync(targetDir, draftDir, { recursive: true, force: true });
+
+    // Sync MongoDB DraftFile from the rolled back version
+    const DraftFile = require('../models/DraftFile');
+    await DraftFile.deleteMany({ deploymentId: id });
+    const scanAndSeed = (dir, relDir = '') => {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+        const full = path.join(dir, item.name);
+        const rel = path.join(relDir, item.name).replace(/\\/g, '/');
+        if (item.isDirectory()) {
+          scanAndSeed(full, rel);
+        } else {
+          const isBin = fileService.isBinaryFile ? fileService.isBinaryFile(full) : false;
+          const content = !isBin ? fs.readFileSync(full, 'utf8') : '';
+          DraftFile.create({ deploymentId: id, filePath: rel, content, isBinary: isBin, updatedAt: new Date() }).catch(() => { });
+        }
       }
     };
-    copyRecursiveSync(targetDir, draftDir);
+    if (fs.existsSync(targetDir)) scanAndSeed(targetDir);
 
     const deployment = await Deployment.findOne({ id });
     if (deployment) {

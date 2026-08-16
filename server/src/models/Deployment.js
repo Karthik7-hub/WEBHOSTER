@@ -24,6 +24,15 @@ const DeploymentSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  versionNumber: {
+    type: Number,
+    default: 1,
+  },
+  status: {
+    type: String,
+    enum: ['ready', 'deploying', 'error'],
+    default: 'ready',
+  },
   backupUrl: {
     type: String,
     default: null,

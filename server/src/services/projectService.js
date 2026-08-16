@@ -68,6 +68,20 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
     fileCount++;
   }
 
+  // Seed MongoDB DraftFile documents
+  try {
+    const DraftFile = require('../models/DraftFile');
+    for (const [relativePath, content] of Object.entries(files)) {
+      await DraftFile.findOneAndUpdate(
+        { deploymentId, filePath: relativePath },
+        { content, isBinary: false, updatedAt: new Date() },
+        { upsert: true }
+      );
+    }
+  } catch (dfErr) {
+    console.warn('[TEMPLATE] DraftFile seed warning:', dfErr.message);
+  }
+
   // Generate initial ZIP backup and upload to ImageKit CDN
   const tempZipPath = path.join(config.paths.deployments, `temp-${deploymentId}-${Date.now()}.zip`);
 
@@ -92,6 +106,10 @@ async function createProjectFromTemplate(projectName, templateName = 'vanilla') 
 
   const fallbackBackupUrl = `/api/deployments/${deploymentId}/download`;
   const finalBackupUrl = imageKitBackup.url || fallbackBackupUrl;
+
+  // Write .deploy_version file in targetDir
+  const versionFilePath = path.join(targetDir, '.deploy_version');
+  fs.writeFileSync(versionFilePath, finalBackupUrl || `${Date.now()}`, 'utf8');
 
   // Write record to database with ImageKit CDN backup URL
   const deployment = await Deployment.create({

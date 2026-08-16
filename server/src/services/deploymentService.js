@@ -47,11 +47,11 @@ function downloadFile(url, destPath) {
           file.close(resolve);
         });
         file.on('error', (err) => {
-          fs.unlink(destPath, () => {});
+          fs.unlink(destPath, () => { });
           reject(err);
         });
       }).on('error', (err) => {
-        fs.unlink(destPath, () => {});
+        fs.unlink(destPath, () => { });
         reject(err);
       });
     };
@@ -165,17 +165,7 @@ async function createDeployment(zipPath, originalName) {
 
     // 2. Clone live targetDir to draftDir immediately
     fs.mkdirSync(draftDir, { recursive: true });
-    const copyRecursiveSync = (src, dest) => {
-      if (fs.statSync(src).isDirectory()) {
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-        fs.readdirSync(src).forEach((childItemName) => {
-          copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-        });
-      } else {
-        fs.copyFileSync(src, dest);
-      }
-    };
-    copyRecursiveSync(targetDir, draftDir);
+    fs.cpSync(targetDir, draftDir, { recursive: true, force: true });
 
     // 3. Upload original ZIP backup to ImageKit (if configured)
     try {
@@ -187,6 +177,39 @@ async function createDeployment(zipPath, originalName) {
     }
 
     const fallbackBackupUrl = `/api/deployments/${deploymentId}/download`;
+    const finalBackupUrl = imageKitBackup ? imageKitBackup.url : fallbackBackupUrl;
+
+    // Write .deploy_version file in targetDir
+    const versionFilePath = path.join(targetDir, '.deploy_version');
+    fs.writeFileSync(versionFilePath, finalBackupUrl || `${Date.now()}`, 'utf8');
+
+    // Seed MongoDB DraftFile documents from targetDir
+    try {
+      const DraftFile = require('../models/DraftFile');
+      const fileService = require('./fileService');
+      const scanAndSeed = (dir, relDir = '') => {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+          if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+          const full = path.join(dir, item.name);
+          const rel = path.join(relDir, item.name).replace(/\\/g, '/');
+          if (item.isDirectory()) {
+            scanAndSeed(full, rel);
+          } else {
+            const isBin = fileService.isBinaryFile ? fileService.isBinaryFile(full) : false;
+            const content = !isBin ? fs.readFileSync(full, 'utf8') : '';
+            DraftFile.findOneAndUpdate(
+              { deploymentId, filePath: rel },
+              { content, isBinary: isBin, updatedAt: new Date() },
+              { upsert: true }
+            ).catch(() => { });
+          }
+        }
+      };
+      scanAndSeed(targetDir);
+    } catch (dfErr) {
+      console.warn('[DEPLOY] DraftFile seed warning:', dfErr.message);
+    }
 
     // 4. Write metadata to MongoDB
     const deployment = await Deployment.create({
@@ -195,7 +218,7 @@ async function createDeployment(zipPath, originalName) {
       originalFileName: originalName,
       fileCount,
       indexFilePath: indexHtmlPath,
-      backupUrl: imageKitBackup ? imageKitBackup.url : fallbackBackupUrl,
+      backupUrl: finalBackupUrl,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
     });
 
@@ -203,7 +226,7 @@ async function createDeployment(zipPath, originalName) {
     await DeploymentVersion.create({
       deploymentId: deploymentId,
       versionNumber: 1,
-      backupUrl: imageKitBackup ? imageKitBackup.url : fallbackBackupUrl,
+      backupUrl: finalBackupUrl,
       backupFileId: imageKitBackup ? imageKitBackup.fileId : null,
       fileCount
     });
@@ -258,23 +281,17 @@ async function restoreFromBackup(id, backupUrl) {
     }
 
     if (backupUrl && (backupUrl.startsWith('http://') || backupUrl.startsWith('https://'))) {
-      // Download ZIP from CDN and extract
+      // Download ZIP from CDN, extract to staging folder, and atomically swap to prevent serving partial states
+      const stagingDir = path.join(config.paths.temp, `staging-${id}-${nanoid(4)}`);
       await downloadFile(backupUrl, tempZipPath);
-      await extractZip(tempZipPath, targetDir);
+      await extractZip(tempZipPath, stagingDir);
+
+      const { atomicReplaceDirectory } = require('../utils/atomicFs');
+      atomicReplaceDirectory(stagingDir, targetDir);
     } else if (fs.existsSync(draftDir)) {
       // Clone from draftDir if available
       fs.mkdirSync(targetDir, { recursive: true });
-      const copyRecursiveSync = (src, dest) => {
-        if (fs.statSync(src).isDirectory()) {
-          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-          fs.readdirSync(src).forEach((childItemName) => {
-            copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-          });
-        } else {
-          fs.copyFileSync(src, dest);
-        }
-      };
-      copyRecursiveSync(draftDir, targetDir);
+      fs.cpSync(draftDir, targetDir, { recursive: true, force: true });
     } else {
       console.log(`[RESTORE] Backup URL is local dynamic endpoint for ${id}. Workspace directory structure preserved.`);
     }
@@ -283,15 +300,15 @@ async function restoreFromBackup(id, backupUrl) {
     if (!fs.existsSync(targetDir) || fs.readdirSync(targetDir).length === 0) {
       fs.mkdirSync(targetDir, { recursive: true });
       fs.mkdirSync(draftDir, { recursive: true });
-      
+
       const deployment = await Deployment.findOne({ id }).lean();
       let templateName = 'vanilla';
       if (deployment && deployment.originalFileName && deployment.originalFileName.startsWith('template-')) {
         templateName = deployment.originalFileName.replace('template-', '').replace('.zip', '');
       }
 
-      const projectService = require('./projectService');
-      const files = projectService.getTemplateFiles ? projectService.getTemplateFiles(templateName, deployment?.name || id) : null;
+      const { getTemplateFiles } = require('../templates');
+      const files = getTemplateFiles ? getTemplateFiles(templateName, deployment?.name || id) : null;
 
       if (files) {
         for (const [relativePath, content] of Object.entries(files)) {
@@ -358,7 +375,7 @@ async function deleteDeployment(id) {
   // 1. Calculate folder size and move it to trash directory
   const targetDir = path.join(config.paths.deployments, id);
   const trashDir = path.join(config.paths.deployments, '.trash');
-  
+
   if (!fs.existsSync(trashDir)) {
     fs.mkdirSync(trashDir, { recursive: true });
   }
@@ -432,14 +449,14 @@ async function redeployProject(id) {
   // Count files recursively and find index.html path
   let fileCount = 0;
   let hasIndex = false;
-  
+
   function scan(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
     for (const item of items) {
       if (item.name.startsWith('.') || item.name === 'node_modules') {
         continue;
       }
-      
+
       const fullPath = path.join(dir, item.name);
       if (item.isDirectory()) {
         scan(fullPath);
@@ -489,7 +506,7 @@ async function redeployProject(id) {
     deployment.backupUrl = imageKitBackup.url || deployment.backupUrl || fallbackBackupUrl;
     deployment.backupFileId = imageKitBackup.fileId || deployment.backupFileId || null;
     deployment.createdAt = new Date(); // Refresh deployed timestamp
-    
+
     await deployment.save();
 
     return deployment.toObject();
@@ -521,16 +538,16 @@ module.exports = {
 function getDirectorySize(dirPath) {
   if (!fs.existsSync(dirPath)) return 0;
   let totalSize = 0;
-  
+
   try {
     const items = fs.readdirSync(dirPath, { withFileTypes: true });
     for (const item of items) {
       const fullPath = path.join(dirPath, item.name);
-      
+
       if (item.name === '.trash' || item.name.startsWith('.')) {
         continue;
       }
-      
+
       if (item.isDirectory()) {
         totalSize += getDirectorySize(fullPath);
       } else {
@@ -540,13 +557,13 @@ function getDirectorySize(dirPath) {
   } catch (err) {
     console.error(`Error calculating size of ${dirPath}:`, err);
   }
-  
+
   return totalSize;
 }
 
 async function getStorageAnalytics() {
   await connectDB();
-  
+
   const deploymentsDir = config.paths.deployments;
   const uploadsDir = config.paths.uploads;
   const tempDir = config.paths.temp;
@@ -561,7 +578,7 @@ async function getStorageAnalytics() {
   if (fs.existsSync(deploymentsDir)) {
     const activeDeployments = await Deployment.find({}, 'id').lean();
     const activeIds = new Set(activeDeployments.map(d => d.id));
-    
+
     const localDirs = fs.readdirSync(deploymentsDir, { withFileTypes: true })
       .filter(item => item.isDirectory())
       .map(item => item.name);
@@ -628,10 +645,10 @@ async function moveInactiveToTrash(dryRun, performedBy = 'System Admin') {
     const folderName = folder.folderName;
     const destFolderName = `${folderName}-${timestamp}`;
     const destPath = path.join(trashDir, destFolderName);
-    
+
     try {
       fs.renameSync(folder.path, destPath);
-      
+
       await Trash.create({
         folderName: destFolderName,
         originalId: folderName,
@@ -772,7 +789,7 @@ async function expireTrashItems() {
     if (expiredItems.length === 0) return;
 
     console.log(`[CLEANUP] Found ${expiredItems.length} expired items in Trash Bin to delete permanently.`);
-    
+
     let expiredCount = 0;
     let expiredSize = 0;
     const expiredFolders = [];

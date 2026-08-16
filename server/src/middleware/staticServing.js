@@ -3,6 +3,20 @@ const fs = require('fs');
 const deploymentService = require('../services/deploymentService');
 const config = require('../config/config');
 
+function readLocalDeployVersion(dirPath) {
+  const versionFilePath = path.join(dirPath, '.deploy_version');
+  if (!fs.existsSync(versionFilePath)) return null;
+  try {
+    const raw = fs.readFileSync(versionFilePath, 'utf8').trim();
+    if (raw.startsWith('{')) {
+      return JSON.parse(raw);
+    }
+    return { backupUrl: raw };
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * Custom static file serving middleware for deployed websites.
  * Captures `/p/:id/*` traffic, restores files lazily if missing, and resolves correct filesystem resources.
@@ -102,84 +116,93 @@ async function serveDeployedSite(req, res, next) {
   }
 
   // 3. Resolve file path in deployments directory
-  // 3. Resolve file path in deployments directory (serve from drafts if preview mode is active)
   const isPreview = req.query.preview === 'true' || (req.headers.referer && req.headers.referer.includes('preview=true'));
   const baseDeploymentDir = isPreview
     ? path.join(config.paths.deployments, '.drafts', deploymentId)
     : path.join(config.paths.deployments, deploymentId);
 
-  // Lazy ZIP restoration if the folder was deleted (cold cache inside ephemeral Vercel /tmp)
-  if (!fs.existsSync(baseDeploymentDir)) {
-    if (isPreview) {
-      const liveDir = path.join(config.paths.deployments, deploymentId);
-      if (fs.existsSync(liveDir)) {
-        console.log(`[staticServing] Dynamically cloning live files to drafts for ${deploymentId}`);
-        fs.mkdirSync(baseDeploymentDir, { recursive: true });
-        const copyRecursiveSync = (src, dest) => {
-          if (fs.statSync(src).isDirectory()) {
-            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-            fs.readdirSync(src).forEach((childItemName) => {
-              copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-            });
-          } else {
-            fs.copyFileSync(src, dest);
-          }
-        };
-        copyRecursiveSync(liveDir, baseDeploymentDir);
-      } else {
-        if (!deployment.backupUrl) {
-          return res.status(404).type('txt').send('Deployment files not found.');
-        }
+  // Check if live deployment directory is missing or outdated compared to authoritative MongoDB release
+  if (!isPreview) {
+    const localMeta = readLocalDeployVersion(baseDeploymentDir);
+    const isOutdated = fs.existsSync(baseDeploymentDir) && 
+      deployment.backupUrl && 
+      deployment.backupUrl.startsWith('http') && 
+      (!localMeta || (localMeta.backupUrl !== deployment.backupUrl && localMeta.versionNumber !== deployment.versionNumber));
+
+    if (!fs.existsSync(baseDeploymentDir) || isOutdated) {
+      if (deployment.backupUrl) {
         try {
+          console.log(`[staticServing] Syncing latest live release (version ${deployment.versionNumber || 'latest'}) for ${deploymentId}...`);
           await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
-          const liveDir = path.join(config.paths.deployments, deploymentId);
-          if (fs.existsSync(liveDir)) {
-            fs.mkdirSync(baseDeploymentDir, { recursive: true });
-            const copyRecursiveSync = (src, dest) => {
-              if (fs.statSync(src).isDirectory()) {
-                if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-                fs.readdirSync(src).forEach((childItemName) => {
-                  copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
-                });
-              } else {
-                fs.copyFileSync(src, dest);
-              }
-            };
-            copyRecursiveSync(liveDir, baseDeploymentDir);
-          } else {
-            // backupUrl was a local fallback — no CDN to pull from, serve from liveDir if it exists
-            console.warn(`[staticServing] restoreFromBackup skipped for ${deploymentId} (local fallback URL). Attempting liveDir fallback.`);
+          const versionFilePath = path.join(baseDeploymentDir, '.deploy_version');
+          const versionMetadata = {
+            deploymentId,
+            versionNumber: deployment.versionNumber || 1,
+            backupUrl: deployment.backupUrl,
+            backupFileId: deployment.backupFileId,
+            fileCount: deployment.fileCount,
+            updatedAt: new Date().toISOString()
+          };
+          if (fs.existsSync(baseDeploymentDir)) {
+            fs.writeFileSync(versionFilePath, JSON.stringify(versionMetadata, null, 2), 'utf8');
           }
-        } catch (err) {
-          console.error(`[ERROR] Draft lazy restoration failed for ${deploymentId}:`, err);
-          return res.status(500).type('txt').send('Error restoring files.');
+        } catch (restoreError) {
+          console.error(`[ERROR] Live restoration failed for ${deploymentId}:`, restoreError);
         }
       }
-    } else {
-      if (!deployment.backupUrl) {
-        console.error(`[ERROR] Unable to restore deployment ${deploymentId}: backup URL is missing.`);
-        return res.status(404).type('txt').send('Deployment files not found locally and no backup exists.');
+    }
+  } else {
+    // Draft / Preview mode serving
+    if (!fs.existsSync(baseDeploymentDir) || fs.readdirSync(baseDeploymentDir).length === 0) {
+      fs.mkdirSync(baseDeploymentDir, { recursive: true });
+      
+      // Try restoring from MongoDB DraftFile first
+      try {
+        const DraftFile = require('../models/DraftFile');
+        const draftFiles = await DraftFile.find({ deploymentId }).lean();
+        if (draftFiles && draftFiles.length > 0) {
+          console.log(`[staticServing] Restoring ${draftFiles.length} draft files from MongoDB for ${deploymentId}`);
+          for (const df of draftFiles) {
+            const fullPath = path.join(baseDeploymentDir, df.filePath);
+            const parent = path.dirname(fullPath);
+            if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
+            fs.writeFileSync(fullPath, df.content || '', 'utf8');
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`[staticServing] DraftFile lookup failed:`, dbErr.message);
       }
 
-      try {
-        await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
-      } catch (restoreError) {
-        console.error(`[ERROR] Lazy restoration failed for ${deploymentId}:`, restoreError);
-        return res.status(500).type('txt').send('Error unzipping deployment files from persistent storage.');
+      // If still empty, clone from live or restore backup
+      if (fs.readdirSync(baseDeploymentDir).length === 0) {
+        const liveDir = path.join(config.paths.deployments, deploymentId);
+        if (fs.existsSync(liveDir)) {
+          console.log(`[staticServing] Dynamically cloning live files to drafts for ${deploymentId}`);
+          fs.cpSync(liveDir, baseDeploymentDir, { recursive: true, force: true });
+        } else if (deployment.backupUrl) {
+          try {
+            await deploymentService.restoreFromBackup(deploymentId, deployment.backupUrl);
+            if (fs.existsSync(liveDir)) {
+              fs.cpSync(liveDir, baseDeploymentDir, { recursive: true, force: true });
+            }
+          } catch (err) {
+            console.error(`[ERROR] Draft lazy restoration failed for ${deploymentId}:`, err);
+          }
+        }
       }
     }
   }
-  
+
   // Extract the relative subpath being requested by subtracting prefix "/p/:id"
   const prefix = `/p/${deploymentId}`;
   let subpath = req.path.substring(prefix.length) || '/';
-  
+
   try {
     subpath = decodeURIComponent(subpath);
   } catch (e) {
     // If decoding fails, keep raw subpath
   }
-  
+
   // Normalize subpath to prevent path traversal attempts
   subpath = path.normalize(subpath).replace(/^(\.\.(\/|\\|$))+/, '');
 
@@ -194,7 +217,7 @@ async function serveDeployedSite(req, res, next) {
   } else {
     // Try to find file directly under deployments/abc123/css/style.css
     const directPath = path.join(baseDeploymentDir, subpath);
-    
+
     // If index.html is deep nested (e.g. indexFilePath is "portfolio/index.html"),
     // check if file is located relative to the parent of indexFilePath (deployments/abc123/portfolio/css/style.css)
     const indexParentDir = path.dirname(deployment.indexFilePath || 'index.html');
@@ -299,6 +322,11 @@ async function serveDeployedSite(req, res, next) {
 
   // Set sandboxing headers so that deployed user-code cannot hijack cookies/storage of the main panel.
   res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' *; img-src * data:; media-src *; connect-src *; style-src 'self' 'unsafe-inline' *;");
+
+  // Prevent stale caching on both live and preview sites so updates appear immediately
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   // Send file with correct content type auto-detection
   res.sendFile(resolvedFileToServe);

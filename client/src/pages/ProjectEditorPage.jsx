@@ -357,8 +357,16 @@ export default function ProjectEditorPage() {
   const handlePublish = async () => {
     setIsPublishing(true);
     setPublishSuccess(false);
-    showToast('Compressing draft and initiating CDN release pipeline...', 'loading');
+    showToast('Saving active changes and publishing to live site...', 'loading');
     try {
+      // 1. Immediately flush/save active editor file if unsaved/dirty
+      if (activeFile && unsavedChanges[activeFile]) {
+        await api.saveFileContent(id, activeFile, editorContent);
+        setUnsavedChanges(prev => ({ ...prev, [activeFile]: false }));
+        setSaveStatus('Draft workspace saved');
+      }
+
+      // 2. Publish draft to live deployment
       const res = await api.publishDraft(id);
       if (res.success) {
         setProject(res.data);

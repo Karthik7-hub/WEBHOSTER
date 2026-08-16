@@ -133,10 +133,7 @@ function getFileContent(deploymentId, relativePath) {
   };
 }
 
-/**
- * Writes text content to a file.
- */
-function saveFileContent(deploymentId, relativePath, content) {
+async function saveFileContent(deploymentId, relativePath, content) {
   const { absolutePath } = ensureSafePath(deploymentId, relativePath);
   
   const dir = path.dirname(absolutePath);
@@ -146,6 +143,17 @@ function saveFileContent(deploymentId, relativePath, content) {
 
   fs.writeFileSync(absolutePath, content || '', 'utf8');
   
+  try {
+    const DraftFile = require('../models/DraftFile');
+    await DraftFile.findOneAndUpdate(
+      { deploymentId, filePath: relativePath },
+      { content: content || '', isBinary: false, updatedAt: new Date() },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.warn('[DraftFile] MongoDB draft sync error:', err.message);
+  }
+
   const stats = fs.statSync(absolutePath);
   return {
     success: true,
@@ -158,7 +166,7 @@ function saveFileContent(deploymentId, relativePath, content) {
 /**
  * Creates an empty file or folder.
  */
-function createFileOrFolder(deploymentId, relativePath, isFolder) {
+async function createFileOrFolder(deploymentId, relativePath, isFolder) {
   const { absolutePath } = ensureSafePath(deploymentId, relativePath);
 
   if (fs.existsSync(absolutePath)) {
@@ -173,6 +181,17 @@ function createFileOrFolder(deploymentId, relativePath, isFolder) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(absolutePath, '', 'utf8');
+
+    try {
+      const DraftFile = require('../models/DraftFile');
+      await DraftFile.findOneAndUpdate(
+        { deploymentId, filePath: relativePath },
+        { content: '', isBinary: false, updatedAt: new Date() },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.warn('[DraftFile] Mongo create sync warning:', err.message);
+    }
   }
 
   return {
@@ -185,7 +204,7 @@ function createFileOrFolder(deploymentId, relativePath, isFolder) {
 /**
  * Deletes a file or folder recursively.
  */
-function deleteFileOrFolder(deploymentId, relativePath) {
+async function deleteFileOrFolder(deploymentId, relativePath) {
   const { absolutePath } = ensureSafePath(deploymentId, relativePath);
 
   if (!fs.existsSync(absolutePath)) {
@@ -193,6 +212,16 @@ function deleteFileOrFolder(deploymentId, relativePath) {
   }
 
   fs.rmSync(absolutePath, { recursive: true, force: true });
+
+  try {
+    const DraftFile = require('../models/DraftFile');
+    await DraftFile.deleteMany({
+      deploymentId,
+      filePath: { $regex: `^${relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` }
+    });
+  } catch (err) {
+    console.warn('[DraftFile] Mongo delete sync warning:', err.message);
+  }
 
   return {
     success: true,
@@ -203,7 +232,7 @@ function deleteFileOrFolder(deploymentId, relativePath) {
 /**
  * Renames a file or folder.
  */
-function renameFileOrFolder(deploymentId, oldRelativePath, newRelativePath) {
+async function renameFileOrFolder(deploymentId, oldRelativePath, newRelativePath) {
   const { absolutePath: oldAbsolutePath } = ensureSafePath(deploymentId, oldRelativePath);
   const { absolutePath: newAbsolutePath } = ensureSafePath(deploymentId, newRelativePath);
 
@@ -221,6 +250,20 @@ function renameFileOrFolder(deploymentId, oldRelativePath, newRelativePath) {
   }
 
   fs.renameSync(oldAbsolutePath, newAbsolutePath);
+
+  try {
+    const DraftFile = require('../models/DraftFile');
+    const existing = await DraftFile.find({
+      deploymentId,
+      filePath: { $regex: `^${oldRelativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` }
+    });
+    for (const doc of existing) {
+      const updatedPath = doc.filePath.replace(oldRelativePath, newRelativePath);
+      await DraftFile.updateOne({ _id: doc._id }, { filePath: updatedPath, updatedAt: new Date() });
+    }
+  } catch (err) {
+    console.warn('[DraftFile] Mongo rename sync warning:', err.message);
+  }
 
   return {
     success: true,
